@@ -4,7 +4,7 @@
  * Signs the registration message after the grace period.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
@@ -14,22 +14,26 @@ import { SelectedTransactionsTable } from '@/components/composed/SelectedTransac
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { areAddressesEqual } from '@/lib/address';
 import {
   useSignTxEIP712,
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
+  useTxContractDeadlines,
 } from '@/hooks/transactions';
 import {
   storeTxSignature,
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
+import { SignatureStorageError } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hash, Hex } from '@/lib/types/ethereum';
+import { selectionMatchesSignedBatch } from '@/lib/transactions/selectionConsistency';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface TxRegisterSignStepProps {
@@ -50,7 +54,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     txHashesForContract,
     chainIdsForContract,
   } = useTransactionSelection();
-  const { registrationType } = useTransactionRegistrationStore();
+  const { registrationType, setStep } = useTransactionRegistrationStore();
   const storedReporter = useTransactionFormStore((s) => s.reporter);
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
 
@@ -85,6 +89,13 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
+  // Mirrors the identical check in TxAcknowledgeSignStep — phase 2 is a second signature over
+  // the same batch, so it needs the same guard. See the refusal branch below.
+  const selectionIsConsistent = useMemo(
+    () => selectionMatchesSignedBatch(selectedTxHashes, selectedTxDetails),
+    [selectedTxHashes, selectedTxDetails]
+  );
+
   // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
     txHashesForContract.length > 0 && chainIdsForContract.length > 0
@@ -112,6 +123,11 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   );
 
   const { signTxRegistration, reset: resetSigning } = useSignTxEIP712();
+
+  // The registration signature commits to the hash of a block at or after the acknowledgement's
+  // grace-period start; passing the start block lets the signer refuse early rather than
+  // producing a signature the contract will reject.
+  const { data: ackDeadlines } = useTxContractDeadlines(reporterAddress);
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
@@ -200,7 +216,11 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         chainId,
       });
 
-      const sig = await signTxRegistration({
+      const {
+        signature: sig,
+        windowBlock,
+        windowBlockHash,
+      } = await signTxRegistration({
         reporter: address,
         dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
@@ -208,17 +228,20 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         trustedForwarder: forwarderAddress,
         nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart: ackDeadlines?.start,
       });
 
       logger.signature.info('Transaction batch registration signature obtained', {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
+        windowBlock: windowBlock.toString(),
       });
 
-      // Set signature state first so UI reflects success even if storage fails
       setSignature(sig);
-      setSignatureStatus('success');
 
-      // Store signature - don't let storage failure discard the signature
+      // The pay step reads this signature back OUT of sessionStorage, so a failed write is not
+      // a cosmetic problem: advancing lands on "signature not found" with no explanation of
+      // why, and no re-sign can fix it while the storage keeps refusing (Safari private mode
+      // reports a zero quota). Report it here, where the user can act on it.
       try {
         storeTxSignature({
           signature: sig,
@@ -232,6 +255,9 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           chainId,
           step: TX_SIGNATURE_STEP.REGISTRATION,
           storedAt: Date.now(),
+          // The pay step must submit the block that was signed over, not re-derive one.
+          windowBlock,
+          windowBlockHash,
         });
         logger.signature.debug('Transaction batch registration signature stored in sessionStorage');
       } catch (storageErr) {
@@ -240,8 +266,16 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           { error: storageErr instanceof Error ? storageErr.message : String(storageErr) },
           storageErr instanceof Error ? storageErr : undefined
         );
-        // Don't rethrow - signature is still valid and usable
+        setSignatureError(
+          storageErr instanceof SignatureStorageError
+            ? storageErr.message
+            : sanitizeErrorMessage(storageErr)
+        );
+        setSignatureStatus('error');
+        return;
       }
+
+      setSignatureStatus('success');
 
       logger.registration.info(
         'Transaction batch registration signing complete, advancing to payment step'
@@ -285,12 +319,28 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={() => setStep('select-transactions')}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
+    );
+  }
+
+  // The table below renders `selectedTxDetails`; `selectedTxHashes` (via `txHashesForContract`)
+  // is what is hashed into `dataHash`, signed, and submitted on-chain. If those ever disagree,
+  // the user is being shown one set of transactions and asked to sign another — and because the
+  // signature over the mismatched set is genuine, nothing downstream can catch it. This is the
+  // SECOND signature over the same batch, so it needs the same guard as the acknowledgement:
+  // a mismatch introduced between the two phases would otherwise be signed here unchecked.
+  // Refuse to sign rather than sign something the user cannot see.
+  if (!selectionIsConsistent) {
+    return (
+      <FlowRecoveryAlert
+        actionLabel="Back to Selection"
+        onAction={() => setStep('select-transactions')}
+      >
+        The transactions shown do not match the transactions that would be signed. Nothing has been
+        signed. Go back and select your transactions again.
+      </FlowRecoveryAlert>
     );
   }
 

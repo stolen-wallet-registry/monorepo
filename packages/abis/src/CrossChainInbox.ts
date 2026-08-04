@@ -35,6 +35,19 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'BRIDGE_ID',
     inputs: [],
     outputs: [
@@ -50,6 +63,19 @@ export const CrossChainInboxABI = [
     type: 'function',
     name: 'acceptOwnership',
     inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -75,6 +101,25 @@ export const CrossChainInboxABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -130,7 +175,7 @@ export const CrossChainInboxABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -216,6 +261,25 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'pendingActivations',
     inputs: [
       {
@@ -245,6 +309,19 @@ export const CrossChainInboxABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -314,6 +391,19 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'sweep',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -372,6 +462,25 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'event',
+    name: 'DuplicateMessageIgnored',
+    inputs: [
+      {
+        name: 'origin',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'OwnershipTransferStarted',
     inputs: [
       {
@@ -412,6 +521,25 @@ export const CrossChainInboxABI = [
     type: 'event',
     name: 'SetupCompleted',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'Swept',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -497,17 +625,17 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'error',
-    name: 'CrossChainInbox__DuplicateMessage',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'CrossChainInbox__OnlyMailbox',
     inputs: [],
   },
   {
     type: 'error',
     name: 'CrossChainInbox__SourceChainMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'CrossChainInbox__SweepFailed',
     inputs: [],
   },
   {
@@ -574,7 +702,17 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
     inputs: [],
   },
   {
@@ -584,7 +722,22 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

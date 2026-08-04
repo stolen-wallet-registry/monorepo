@@ -8,11 +8,13 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react
 import { useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
-import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
+import { GracePeriodTimer, getGracePeriodStatus } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { clearAllTxSignatures } from '@/lib/signatures/transactions';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useTxContractDeadlines } from '@/hooks/transactions';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
@@ -37,7 +39,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // Use reporter from form store - this is the address deadlines are stored under in the contract
   // In self-relay, the connected wallet may be the gas wallet (forwarder), not the reporter
   const reporter = useTransactionFormStore((s) => s.reporter);
-  const { acknowledgementHash } = useTransactionRegistrationStore();
+  const { acknowledgementHash, setStep } = useTransactionRegistrationStore();
   const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback
@@ -73,6 +75,11 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // Detect zeroed deadline data — indicates no pending acknowledgement in the contract
   const hasNoPendingAck =
     deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+
+  // Registration window already closed on-chain (a real ack exists but its expiry block has
+  // passed). Must be checked AFTER hasNoPendingAck: the contract reports isExpired=true for a
+  // nonexistent acknowledgement too (deadline 0 <= block.number).
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
 
   useEffect(() => {
     if (hasNoPendingAck) {
@@ -121,10 +128,41 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     onComplete();
   }, [setThemeVariant, setColorScheme, onComplete]);
 
+  /**
+   * Recovery for the unrecoverable grace-period states.
+   *
+   * The acknowledgement is missing or its window has closed on chain, so its nonce is spent and
+   * every cached batch signature can now only produce another revert.
+   *
+   * Returns to `select-transactions` rather than to `acknowledge-sign`, which is deliberately
+   * EARLIER than `TxRegisterPayStep`'s non-P2P window-closed retry (that one goes to
+   * `acknowledge-sign` and keeps the batch). The difference is what is still known good.
+   * There, the selection has already been signed over twice and only the acknowledgement needs
+   * redoing. Here, `clearAllTxSignatures()` has just discarded every signature for every batch,
+   * so nothing binds the reporter to the batch they picked — and since they are about to pay
+   * for a second acknowledgement, re-opening the selection is the cheaper moment to revise it.
+   *
+   * `TxRegisterPayStep`'s P2P window-closed path also lands on `select-transactions`, but for
+   * an unrelated reason: that is the only step at which `isTxRelayerProtocolExpectedAtStep`
+   * admits a fresh `TX_ACK_SIG` from the partner.
+   */
+  const restartFromSelection = useCallback(() => {
+    logger.registration.warn(
+      'Transaction grace period unrecoverable, restarting from transaction selection',
+      { reporter, chainId }
+    );
+    clearAllTxSignatures();
+    setStep('select-transactions');
+  }, [reporter, chainId, setStep]);
+
   // Countdown timer - target is the START block (when window opens)
-  // Pass null when no pending ack to prevent timer from firing immediately on zeroed data
-  const timerTargetBlock = hasNoPendingAck ? null : (deadlines?.start ?? null);
-  const timerCurrentBlock = hasNoPendingAck ? null : (deadlines?.currentBlock ?? null);
+  // Pass null when no pending ack OR when the on-chain window has already closed. The timer
+  // targets the START block, so on a closed window it would see the target in the past, fire
+  // onExpire immediately, and auto-advance the user into a guaranteed registration revert
+  // after signing a second EIP-712 message.
+  const timerDisabled = hasNoPendingAck || windowClosed;
+  const timerTargetBlock = timerDisabled ? null : (deadlines?.start ?? null);
+  const timerCurrentBlock = timerDisabled ? null : (deadlines?.currentBlock ?? null);
 
   const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
     useCountdownTimer({
@@ -155,12 +193,9 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // Missing transaction data or reporter
   if (txHashesForContract.length === 0 || !reporter) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -193,13 +228,20 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // No pending acknowledgement — contract returned zeroed deadline data
   if (hasNoPendingAck) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No pending acknowledgement found. The registration window may have expired. Please go back
-          and submit the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        No pending acknowledgement found. The registration window may have expired. Start over to
+        submit the acknowledgement again.
+      </FlowRecoveryAlert>
+    );
+  }
+
+  // Registration window closed on-chain — advancing would only produce a revert
+  if (windowClosed) {
+    return (
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        The registration window has expired (closed at block {deadlines.expiry.toString()}, current
+        block {deadlines.currentBlock.toString()}). Start over to submit the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -237,9 +279,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
         timeRemaining={timeRemaining}
         totalMs={totalMs}
         blocksLeft={blocksLeft}
-        isExpired={isExpired}
-        isRunning={isRunning}
-        isWaitingForBlock={isWaitingForBlock}
+        status={getGracePeriodStatus({ isExpired, isRunning, isWaitingForBlock })}
         initialTotalMs={initialTotalMs}
       />
 

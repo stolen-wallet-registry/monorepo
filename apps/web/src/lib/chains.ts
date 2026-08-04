@@ -74,6 +74,27 @@ export function getChainDisplayFromCaip2(caip2?: string): Caip2ChainDisplayInfo 
     };
   }
 
+  // CAIP-2 wildcard reference: the entry applies to every chain in its namespace rather than to
+  // one. Registered wallets are keyed this way on purpose (a wallet marked stolen is stolen on
+  // every EVM chain — see CAIP10.walletKey), so this is a real state, not malformed input.
+  //
+  // Checked BEFORE parseCAIP2, which rejects it: `*` is not in the CAIP-2 reference charset
+  // ([-_a-zA-Z0-9]), so the parser correctly refuses it and this would otherwise fall through
+  // and render the raw "eip155:*".
+  const wildcardMatch = /^([-a-z0-9]{3,8}):\*$/.exec(caip2);
+  if (wildcardMatch) {
+    const namespace = wildcardMatch[1]!;
+    const label = namespace === 'eip155' ? 'All EVM chains' : `All ${namespace} chains`;
+    return {
+      chainId: null,
+      shortName: label,
+      displayName: label,
+      caip2,
+      isKnown: false,
+      isLocal: false,
+    };
+  }
+
   const parsed = parseCAIP2(caip2);
   if (parsed && parsed.namespace === 'eip155' && /^\d+$/.test(parsed.chainId)) {
     const chainId = parseInt(parsed.chainId, 10);

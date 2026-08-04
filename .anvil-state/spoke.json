@@ -7,7 +7,10 @@
     "basefee": 76273547,
     "difficulty": "0x0",
     "prevrandao": "0x275b0471f21c3cb456b0e59aa65e2c8bdbc3c7964bf1e6abeb08a5e4227d72cb",
-    "blob_excess_gas_and_price": { "excess_blob_gas": 0, "blob_gasprice": 1 }
+    "blob_excess_gas_and_price": {
+      "excess_blob_gas": 0,
+      "blob_gasprice": 1
+    }
   },
   "accounts": {
     "0x0000000000000000000000000000000000000000": {
@@ -1322,7 +1325,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -1411,10 +1418,18 @@
                 },
                 "decoded": null,
                 "position": 1,
-                "index": 0
+                "index": 0,
+                "address": "0x196dbcbb54b8ec4958c959d8949ebfe87ac2aaaf"
               }
             ],
-            "ordering": [{ "Call": 0 }, { "Log": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              },
+              {
+                "Log": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -1441,7 +1456,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 1,
@@ -1540,7 +1559,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 0
+                "index": 0,
+                "address": "0x82c6d3ed4cd33d8ec1e51d0b5cc1d822eaa0c3dc"
               },
               {
                 "raw_log": {
@@ -1549,7 +1569,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 1
+                "index": 1,
+                "address": "0x82c6d3ed4cd33d8ec1e51d0b5cc1d822eaa0c3dc"
               },
               {
                 "raw_log": {
@@ -1558,7 +1579,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 2
+                "index": 2,
+                "address": "0x82c6d3ed4cd33d8ec1e51d0b5cc1d822eaa0c3dc"
               },
               {
                 "raw_log": {
@@ -1571,10 +1593,24 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 3
+                "index": 3,
+                "address": "0x82c6d3ed4cd33d8ec1e51d0b5cc1d822eaa0c3dc"
               }
             ],
-            "ordering": [{ "Log": 0 }, { "Log": 1 }, { "Log": 2 }, { "Log": 3 }]
+            "ordering": [
+              {
+                "Log": 0
+              },
+              {
+                "Log": 1
+              },
+              {
+                "Log": 2
+              },
+              {
+                "Log": 3
+              }
+            ]
           }
         ],
         "exit": "Return",
@@ -1654,7 +1690,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -1743,10 +1783,15 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 0
+                "index": 0,
+                "address": "0xc6b8fbf96cf7bbe45576417ec2163acecfa88ecc"
               }
             ],
-            "ordering": [{ "Log": 0 }]
+            "ordering": [
+              {
+                "Log": 0
+              }
+            ]
           }
         ],
         "exit": "Return",
@@ -1858,7 +1903,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -1936,7 +1985,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2014,7 +2067,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2103,7 +2160,8 @@
                 },
                 "decoded": null,
                 "position": 1,
-                "index": 0
+                "index": 0,
+                "address": "0x2a264f26859166c5bf3868a54593ee716aebc848"
               },
               {
                 "raw_log": {
@@ -2112,7 +2170,8 @@
                 },
                 "decoded": null,
                 "position": 1,
-                "index": 1
+                "index": 1,
+                "address": "0x2a264f26859166c5bf3868a54593ee716aebc848"
               },
               {
                 "raw_log": {
@@ -2125,16 +2184,29 @@
                 },
                 "decoded": null,
                 "position": 1,
-                "index": 2
+                "index": 2,
+                "address": "0x2a264f26859166c5bf3868a54593ee716aebc848"
               }
             ],
             "ordering": [
-              { "Call": 0 },
-              { "Log": 0 },
-              { "Log": 1 },
-              { "Log": 2 },
-              { "Call": 1 },
-              { "Call": 2 }
+              {
+                "Call": 0
+              },
+              {
+                "Log": 0
+              },
+              {
+                "Log": 1
+              },
+              {
+                "Log": 2
+              },
+              {
+                "Call": 1
+              },
+              {
+                "Call": 2
+              }
             ]
           },
           {
@@ -2162,7 +2234,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 1,
@@ -2254,7 +2330,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 3
+                "index": 3,
+                "address": "0xa48cf5663f0dacfd819cfc02da00e6d2645ee3b8"
               },
               {
                 "raw_log": {
@@ -2263,7 +2340,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 4
+                "index": 4,
+                "address": "0xa48cf5663f0dacfd819cfc02da00e6d2645ee3b8"
               },
               {
                 "raw_log": {
@@ -2276,10 +2354,21 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 5
+                "index": 5,
+                "address": "0xa48cf5663f0dacfd819cfc02da00e6d2645ee3b8"
               }
             ],
-            "ordering": [{ "Log": 0 }, { "Log": 1 }, { "Log": 2 }]
+            "ordering": [
+              {
+                "Log": 0
+              },
+              {
+                "Log": 1
+              },
+              {
+                "Log": 2
+              }
+            ]
           }
         ],
         "exit": "Return",
@@ -2377,7 +2466,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2465,7 +2558,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 0
+                "index": 0,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2474,10 +2568,18 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 1
+                "index": 1,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               }
             ],
-            "ordering": [{ "Log": 0 }, { "Log": 1 }]
+            "ordering": [
+              {
+                "Log": 0
+              },
+              {
+                "Log": 1
+              }
+            ]
           }
         ],
         "exit": "Return",
@@ -2542,7 +2644,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2631,10 +2737,15 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 0
+                "index": 0,
+                "address": "0xed1db453c3156ff3155a97ad217b3087d5dc5f6e"
               }
             ],
-            "ordering": [{ "Log": 0 }]
+            "ordering": [
+              {
+                "Log": 0
+              }
+            ]
           }
         ],
         "exit": "Return",
@@ -2695,7 +2806,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2733,7 +2848,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 0
+                "index": 0,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2745,7 +2861,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 1
+                "index": 1,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2757,7 +2874,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 2
+                "index": 2,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2769,7 +2887,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 3
+                "index": 3,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2782,7 +2901,8 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 4
+                "index": 4,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               },
               {
                 "raw_log": {
@@ -2791,16 +2911,29 @@
                 },
                 "decoded": null,
                 "position": 0,
-                "index": 5
+                "index": 5,
+                "address": "0x12975173b87f7595ee45dffb2ab812ece596bf84"
               }
             ],
             "ordering": [
-              { "Log": 0 },
-              { "Log": 1 },
-              { "Log": 2 },
-              { "Log": 3 },
-              { "Log": 4 },
-              { "Log": 5 }
+              {
+                "Log": 0
+              },
+              {
+                "Log": 1
+              },
+              {
+                "Log": 2
+              },
+              {
+                "Log": 3
+              },
+              {
+                "Log": 4
+              },
+              {
+                "Log": 5
+              }
             ]
           }
         ],
@@ -2962,10 +3095,18 @@
                 },
                 "decoded": null,
                 "position": 1,
-                "index": 0
+                "index": 0,
+                "address": "0xd04ff4a75edd737a73e92b2f2274cb887d96e110"
               }
             ],
-            "ordering": [{ "Call": 0 }, { "Log": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              },
+              {
+                "Log": 0
+              }
+            ]
           },
           {
             "parent": 0,
@@ -2992,7 +3133,11 @@
               "decoded": null
             },
             "logs": [],
-            "ordering": [{ "Call": 0 }]
+            "ordering": [
+              {
+                "Call": 0
+              }
+            ]
           },
           {
             "parent": 1,

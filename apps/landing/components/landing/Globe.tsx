@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import createGlobe, { COBEOptions } from 'cobe';
-import { useMotionValue, useSpring } from 'motion/react';
+import { useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 
 import { cn } from '@swr/ui';
 
@@ -71,6 +71,11 @@ export function Globe({
     }
   };
 
+  // The globe spins continuously on every animation frame. That is JS-driven, so the
+  // `prefers-reduced-motion` media query in globals.css cannot reach it — the auto-rotation
+  // has to be switched off here. Dragging still works; only the unattended spin stops.
+  const shouldReduceMotion = useReducedMotion();
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -89,21 +94,24 @@ export function Globe({
       width: widthRef.current * 2,
       height: widthRef.current * 2,
       onRender: (state) => {
-        if (!pointerInteracting.current) phiRef.current += 0.005;
+        if (!pointerInteracting.current && !shouldReduceMotion) phiRef.current += 0.005;
         state.phi = phiRef.current + rs.get();
         state.width = widthRef.current * 2;
         state.height = widthRef.current * 2;
       },
     });
 
-    setTimeout(() => {
+    // Deferred fade-in. Held so the cleanup owns every allocation this effect makes —
+    // otherwise unmounting within the same tick runs the callback against a detached canvas.
+    const fadeInTimeout = setTimeout(() => {
       if (canvas) canvas.style.opacity = '1';
     }, 0);
     return () => {
+      clearTimeout(fadeInTimeout);
       globe.destroy();
       window.removeEventListener('resize', onResize);
     };
-  }, [rs, config]);
+  }, [rs, config, shouldReduceMotion]);
 
   return (
     <div className={cn('absolute inset-0 mx-auto aspect-[1/1] w-full max-w-[600px]', className)}>

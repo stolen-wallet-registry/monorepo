@@ -1,6 +1,48 @@
 import { describe, it, expect, vi } from 'vitest';
-import { decodeContractError, getContractErrorInfo, sanitizeErrorMessage } from './decode';
+import {
+  BaseError,
+  ContractFunctionExecutionError,
+  ContractFunctionRevertedError,
+  HttpRequestError,
+  TimeoutError,
+  encodeErrorResult,
+  parseAbi,
+} from 'viem';
+import {
+  decodeContractError,
+  decodeContractErrorFromError,
+  getContractErrorInfo,
+  sanitizeErrorMessage,
+} from './decode';
 import { CONTRACT_ERROR_SELECTORS } from './selectors';
+
+/**
+ * Build the error object viem actually throws for a reverted contract call.
+ *
+ * The nesting matters: viem wraps `ContractFunctionRevertedError` inside a
+ * `ContractFunctionExecutionError`, so the decoder has to walk the cause chain rather
+ * than inspect the top-level error. Hand-writing a message string (as the original tests
+ * did) exercises a code path that no real viem call can reach.
+ */
+function makeViemRevertError({
+  abi,
+  data,
+  functionName = 'register',
+}: {
+  abi: readonly unknown[];
+  data: `0x${string}`;
+  functionName?: string;
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const typedAbi = abi as any;
+  const reverted = new ContractFunctionRevertedError({ abi: typedAbi, data, functionName });
+  return new ContractFunctionExecutionError(reverted, { abi: typedAbi, functionName });
+}
+
+const REVERT_ABI = parseAbi([
+  'error SpokeRegistry__ForwarderExpired()',
+  'function register() returns (bool)',
+]);
 
 describe('decodeContractError', () => {
   it('decodes known error selector to user-friendly message', () => {
@@ -30,7 +72,54 @@ describe('getContractErrorInfo', () => {
   });
 });
 
+describe('decodeContractErrorFromError', () => {
+  it('decodes a real viem revert by ABI-decoded error name', () => {
+    const data = encodeErrorResult({
+      abi: REVERT_ABI,
+      errorName: 'SpokeRegistry__ForwarderExpired',
+    });
+    const error = makeViemRevertError({ abi: REVERT_ABI, data });
+
+    expect(decodeContractErrorFromError(error)).toContain('registration window has expired');
+  });
+
+  // When the reverted error is absent from the ABI passed to the call, viem cannot decode a
+  // name and surfaces only the raw selector — the selector map has to cover that case.
+  it('falls back to the selector when the error is not in the ABI', () => {
+    const abiWithoutError = parseAbi(['function register() returns (bool)']);
+    const error = makeViemRevertError({ abi: abiWithoutError, data: '0x9525dee7' });
+
+    expect(decodeContractErrorFromError(error)).toContain('registration window has expired');
+  });
+
+  it('returns null for an unrecognized revert', () => {
+    const abiWithoutError = parseAbi(['function register() returns (bool)']);
+    const error = makeViemRevertError({ abi: abiWithoutError, data: '0x12345678' });
+
+    expect(decodeContractErrorFromError(error)).toBeNull();
+  });
+
+  it('returns null for non-viem errors', () => {
+    expect(decodeContractErrorFromError(new Error('boom'))).toBeNull();
+    expect(decodeContractErrorFromError('boom')).toBeNull();
+    expect(decodeContractErrorFromError(null)).toBeNull();
+  });
+});
+
 describe('sanitizeErrorMessage', () => {
+  // The end-to-end guarantee: a real viem revert reaches the user as the curated message,
+  // not as a raw Solidity error name. This is what the regex-only decoder failed to do.
+  it('renders a curated message for a real viem revert', () => {
+    const data = encodeErrorResult({
+      abi: REVERT_ABI,
+      errorName: 'SpokeRegistry__ForwarderExpired',
+    });
+    const result = sanitizeErrorMessage(makeViemRevertError({ abi: REVERT_ABI, data }));
+
+    expect(result).toContain('registration window has expired');
+    expect(result).not.toContain('SpokeRegistry__ForwarderExpired');
+  });
+
   it('decodes contract custom errors', () => {
     const result = sanitizeErrorMessage(new Error('custom error 0x9525dee7'));
     expect(result).toContain('registration window has expired');
@@ -74,156 +163,167 @@ describe('sanitizeErrorMessage', () => {
     expect(result).toContain('registration window has expired');
     expect(result).not.toContain('Version:');
   });
+
+  // V29 residual. The old rule was `/\s*Details:\s*[^.]+\./gi` — it stopped at the FIRST
+  // period, so a details clause containing a dotted host stripped only as far as that host's
+  // first dot and rendered everything after it. Against the old rule this test fails with the
+  // key still present, which is the whole point of it existing.
+  it('strips a Details clause whose contents contain periods, including a keyed URL', () => {
+    const result = sanitizeErrorMessage(
+      new Error(
+        'HTTP request failed. Details: request to https://eth-mainnet.g.alchemy.com/v2/SECRETKEY123 failed. retrying.'
+      )
+    );
+
+    expect(result).not.toContain('SECRETKEY123');
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('Details:');
+  });
+
+  // The other half of the same defect: no trailing period meant the old rule matched nothing
+  // and the entire clause survived verbatim.
+  it('strips a Details clause with no trailing period', () => {
+    const result = sanitizeErrorMessage(
+      new Error('Request failed. Details: connection refused to https://rpc.example.com/v2/KEYABC')
+    );
+
+    expect(result).not.toContain('KEYABC');
+    expect(result).not.toContain('Details:');
+  });
+
+  // Truncating Details to end-of-LINE rather than end-of-string is deliberate: viem puts
+  // Version and Raw Call Arguments on their own lines, and swallowing them here would make
+  // their own redaction rules untestable. This pins that boundary.
+  it('does not swallow following lines when stripping Details', () => {
+    const result = sanitizeErrorMessage(
+      new Error(
+        'Execution reverted.\nDetails: execution reverted: some reason\nVersion: viem@2.41.2'
+      )
+    );
+
+    expect(result).not.toContain('Details:');
+    expect(result).not.toContain('Version:');
+    expect(result).toContain('Execution reverted');
+  });
 });
 
-describe('CONTRACT_ERROR_SELECTORS coverage', () => {
-  /** All selectors and their expected error names — keeps selector→name mapping honest. */
-  const expectedSelectors: Record<string, string> = {
-    // FraudRegistryHub
-    '0x92788ffd': 'FraudRegistryHub__ZeroAddress',
-    '0x25da34a1': 'FraudRegistryHub__OnlyInbox',
-    '0xf6c88e35': 'FraudRegistryHub__InvalidIdentifierLength',
-    '0x7fa366d3': 'FraudRegistryHub__WithdrawFailed',
-    // WalletRegistry
-    '0xa74e7b8b': 'WalletRegistry__AlreadyRegistered',
-    '0x133ee0d6': 'WalletRegistry__AlreadyAcknowledged',
-    '0x5915fdb8': 'WalletRegistry__DeadlineExpired',
-    '0x5bc89f7d': 'WalletRegistry__DeadlineInPast',
-    '0x3214c145': 'WalletRegistry__GracePeriodNotStarted',
-    '0xbf69e113': 'WalletRegistry__InvalidSignature',
-    '0x30866145': 'WalletRegistry__InvalidForwarder',
-    '0x747dde89': 'WalletRegistry__InsufficientFee',
-    '0x0a17bc56': 'WalletRegistry__FeeTransferFailed',
-    '0x4e71ab39': 'WalletRegistry__RefundFailed',
-    '0xa6565bcd': 'WalletRegistry__ZeroAddress',
-    '0x31a0af95': 'WalletRegistry__OnlyHub',
-    '0x637b467b': 'WalletRegistry__OnlyOperatorSubmitter',
-    '0x5934e5e0': 'WalletRegistry__InvalidNonce',
-    '0x39f0ba50': 'WalletRegistry__EmptyBatch',
-    '0x545fd576': 'WalletRegistry__ArrayLengthMismatch',
-    '0x48193183': 'WalletRegistry__InvalidStep',
-    '0x736d30d5': 'WalletRegistry__BatchTooLarge',
-    // TransactionRegistry
-    '0x378855ef': 'TransactionRegistry__AlreadyAcknowledged',
-    '0x2015cf13': 'TransactionRegistry__DeadlineExpired',
-    '0x98de1e59': 'TransactionRegistry__DeadlineInPast',
-    '0xe4fcb386': 'TransactionRegistry__GracePeriodNotStarted',
-    '0x6376fd7d': 'TransactionRegistry__InvalidSignature',
-    '0x11780b54': 'TransactionRegistry__InvalidForwarder',
-    '0xe0ff51d7': 'TransactionRegistry__InsufficientFee',
-    '0xd6a30fe5': 'TransactionRegistry__ZeroAddress',
-    '0x6b588216': 'TransactionRegistry__OnlyHub',
-    '0x40064f87': 'TransactionRegistry__OnlyOperatorSubmitter',
-    '0x1f86fd29': 'TransactionRegistry__EmptyBatch',
-    '0x85758e90': 'TransactionRegistry__ArrayLengthMismatch',
-    '0x97606fef': 'TransactionRegistry__DataHashMismatch',
-    '0xef0b2ab3': 'TransactionRegistry__InvalidStep',
-    '0xc6eb8cd2': 'TransactionRegistry__HubTransferFailed',
-    '0xef7a7943': 'TransactionRegistry__RefundFailed',
-    '0x5fa98a5a': 'TransactionRegistry__BatchTooLarge',
-    '0x351d3c29': 'TransactionRegistry__InvalidTxHashLength',
-    // ContractRegistry
-    '0x047c1f80': 'ContractRegistry__ZeroAddress',
-    '0xc00e0835': 'ContractRegistry__OnlyOperatorSubmitter',
-    '0xcd74ea8c': 'ContractRegistry__EmptyBatch',
-    '0x0fc15e9d': 'ContractRegistry__ArrayLengthMismatch',
-    '0x5b743ae3': 'ContractRegistry__BatchTooLarge',
-    // OperatorSubmitter
-    '0x13664080': 'OperatorSubmitter__ZeroAddress',
-    '0xbfd711b2': 'OperatorSubmitter__NotApprovedOperator',
-    '0x0f0c34f7': 'OperatorSubmitter__EmptyBatch',
-    '0x15c1e4ff': 'OperatorSubmitter__ArrayLengthMismatch',
-    '0x030ff595': 'OperatorSubmitter__InsufficientFee',
-    '0x58614d91': 'OperatorSubmitter__FeeForwardFailed',
-    '0xb951fb83': 'OperatorSubmitter__RefundFailed',
-    '0x0079d758': 'OperatorSubmitter__InvalidFeeConfig',
-    // CrossChainMessage
-    '0xd5fd8f7a': 'CrossChainMessage__InvalidMessageType',
-    '0x57d73aa3': 'CrossChainMessage__UnsupportedVersion',
-    '0x2019eeca': 'CrossChainMessage__InvalidMessageLength',
-    '0x315ba0c5': 'CrossChainMessage__BatchSizeMismatch',
-    // CrossChainInbox
-    '0x6d50853e': 'CrossChainInbox__ZeroAddress',
-    '0x4babc769': 'CrossChainInbox__OnlyMailbox',
-    '0x7d60d71c': 'CrossChainInbox__UntrustedSource',
-    '0x249d64fe': 'CrossChainInbox__SourceChainMismatch',
-    '0x2f5f5948': 'CrossChainInbox__UnknownMessageType',
-    '0x0634f9a3': 'CrossChainInbox__DuplicateMessage',
-    // SpokeRegistry
-    '0xc718cb18': 'SpokeRegistry__ZeroAddress',
-    '0xe08eb492': 'SpokeRegistry__InvalidTimingConfig',
-    '0x664e4519': 'SpokeRegistry__InvalidOwner',
-    '0xcd4e1023': 'SpokeRegistry__SignatureExpired',
-    '0x8a2ee99e': 'SpokeRegistry__InvalidNonce',
-    '0xae315749': 'SpokeRegistry__InvalidSigner',
-    '0x18a34ddf': 'SpokeRegistry__InvalidForwarder',
-    '0xa5434e70': 'SpokeRegistry__GracePeriodNotStarted',
-    '0x9525dee7': 'SpokeRegistry__ForwarderExpired',
-    '0x4160d098': 'SpokeRegistry__HubNotConfigured',
-    '0x6151896c': 'SpokeRegistry__InsufficientFee',
-    '0x28bcfd67': 'SpokeRegistry__RefundFailed',
-    '0xa8682eaf': 'SpokeRegistry__WithdrawalFailed',
-    '0x6f59b28e': 'SpokeRegistry__InvalidHubConfig',
-    '0xbefa3abb': 'SpokeRegistry__InvalidStep',
-    '0xe3e9689e': 'SpokeRegistry__EmptyBatch',
-    '0x81a72855': 'SpokeRegistry__ArrayLengthMismatch',
-    '0xba8873e4': 'SpokeRegistry__InvalidDataHash',
-    '0x9de3b4a9': 'SpokeRegistry__DataMismatch',
-    // CAIP10
-    '0xfd0a5b1e': 'CAIP10__InvalidFormat',
-    '0x96c95b05': 'CAIP10__UnsupportedNamespace',
-    '0x31d8ad42': 'CAIP10Evm__InvalidAddress',
-    // FeeManager
-    '0xb05591b8': 'Fee__Insufficient',
-    '0x3add2ca9': 'Fee__InvalidPrice',
-    '0x1d3997c8': 'Fee__NoOracle',
-    '0x82599075': 'Fee__StalePrice',
-    // OperatorRegistry
-    '0x2c2b0fe3': 'OperatorRegistry__ZeroAddress',
-    '0x84fd1a86': 'OperatorRegistry__AlreadyApproved',
-    '0x970753c1': 'OperatorRegistry__NotApproved',
-    '0x4f93924f': 'OperatorRegistry__InvalidCapabilities',
-    // Soulbound
-    '0xbf9e1a75': 'NonTransferrable',
-    '0x750b219c': 'WithdrawFailed',
-    '0xbb0bac99': 'InvalidFeeCollector',
-    '0xe48f34f1': 'InvalidTranslations',
-    '0x2ef38faa': 'NotRegisteredOrPending',
-    '0xddefae28': 'AlreadyMinted',
-    '0x11a1e697': 'InvalidRegistry',
-    '0x860b82a9': 'BelowMinimum',
-    '0x5cd609c7': 'InvalidMinWei',
-    '0xbb97a108': 'LanguageNotSupported',
-    '0x564576d3': 'LanguageAlreadyExists',
-    '0xecb52231': 'EmptyLanguageCode',
-    '0x55ad1483': 'MaxLanguagesReached',
-    '0x305a27a9': 'StringTooLong',
-    '0x40b9e958': 'ArrayMappingDesync',
-    '0xf0121ff2': 'LanguageNotFound',
-    // SoulboundReceiver
-    '0xc48f6eed': 'SoulboundReceiver__NonCanonicalSender',
-    // TimelockOwnable
-    '0xb23bf3de': 'TimelockOwnable__NotProposed',
-    '0xf9fcfd17': 'TimelockOwnable__TooEarly',
-    '0x23596adf': 'TimelockOwnable__AlreadyPending',
-    '0xe5900879': 'TimelockOwnable__SetupAlreadyComplete',
-    // BridgeAdapter
-    '0x2c460928': 'BridgeAdapter__InsufficientFee',
-    '0x3c8f137c': 'BridgeAdapter__UnsupportedChain',
-    '0xb8aa6394': 'BridgeAdapter__PayloadTooLarge',
-  };
+/**
+ * The keyed transport is LIVE — this is not a latent risk.
+ *
+ * `apps/web/src/lib/ens-config.ts` builds
+ * `https://eth-mainnet.g.alchemy.com/v2/${VITE_ALCHEMY_API_KEY}` (or takes
+ * `VITE_MAINNET_RPC_URL` verbatim) and hands it to the viem client behind `useEnsDisplay`
+ * and `useEnsResolve`, so any ENS failure already produces a viem error carrying the key in
+ * its `URL:` line. The sanitized string is rendered at ~20 UI sites, so anything it carries
+ * goes straight into the DOM.
+ *
+ * These tests are therefore load-bearing, not defensive. Do NOT relax them on the old
+ * assumption that no key is in play.
+ */
+describe('sanitizeErrorMessage — never leaks request details (V29)', () => {
+  const SECRET_KEY = 'sEcReTaLcHeMyKeY123456789';
+  const KEYED_URL = `https://base-mainnet.g.alchemy.com/v2/${SECRET_KEY}`;
 
-  it('every expected selector is present with the correct name', () => {
-    for (const [selector, expectedName] of Object.entries(expectedSelectors)) {
-      const info = CONTRACT_ERROR_SELECTORS[selector];
-      expect(info, `Missing selector ${selector} (${expectedName})`).toBeDefined();
-      expect(info.name).toBe(expectedName);
+  /** viem nests network failures inside a wrapper, so the top-level name is the wrapper's. */
+  function makeNestedHttpError(cause: BaseError) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const typedAbi = REVERT_ABI as any;
+    return new ContractFunctionExecutionError(cause, {
+      abi: typedAbi,
+      functionName: 'register',
+    });
+  }
+
+  it('strips the RPC URL and request body from a nested HttpRequestError', () => {
+    const httpError = new HttpRequestError({
+      body: { method: 'eth_call', params: [{ data: '0xdeadbeef' }] },
+      details: 'connect ECONNREFUSED',
+      status: 500,
+      url: KEYED_URL,
+    });
+
+    const result = sanitizeErrorMessage(makeNestedHttpError(httpError));
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('URL:');
+    expect(result).not.toContain('Request body:');
+    expect(result).toContain('Network error');
+  });
+
+  it('strips the RPC URL from a nested TimeoutError', () => {
+    const timeout = new TimeoutError({
+      body: { method: 'eth_call' },
+      url: KEYED_URL,
+    });
+
+    const result = sanitizeErrorMessage(makeNestedHttpError(timeout));
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).toContain('Network error');
+  });
+
+  it('strips URL and request body even when no viem error class matches', () => {
+    // Defense in depth: an error shape we do not recognize must still not carry the key
+    // through the generic tail sanitizer.
+    const raw = new Error(
+      [
+        'Something unexpected went wrong while talking to the node.',
+        `URL: ${KEYED_URL}`,
+        'Request body: {"method":"eth_call","params":[{"data":"0xabc"}]}',
+      ].join('\n')
+    );
+
+    const result = sanitizeErrorMessage(raw);
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('Request body:');
+  });
+
+  it('a recognized contract revert still wins over the network path', () => {
+    // The revert decoder runs first; walking the chain for network errors must not
+    // shadow the more specific message.
+    const result = sanitizeErrorMessage(
+      makeViemRevertError({
+        abi: REVERT_ABI,
+        data: encodeErrorResult({
+          abi: REVERT_ABI,
+          errorName: 'SpokeRegistry__ForwarderExpired',
+        }),
+      })
+    );
+
+    expect(result).not.toContain('Network error');
+  });
+});
+
+describe('CONTRACT_ERROR_SELECTORS integrity', () => {
+  // Selector↔name correctness and ABI coverage are asserted in coverage.test.ts, which
+  // derives both from the generated ABIs. A hand-maintained mirror of the map (which is what
+  // lived here) is double bookkeeping: it only ever restates what the map already says, and
+  // it has to be edited in lockstep with every addition — so it catches typos in itself
+  // rather than real drift against Solidity.
+
+  it('error names are unique (by-name map cannot silently drop entries)', () => {
+    // CONTRACT_ERROR_BY_NAME is built with Object.fromEntries, which silently keeps the LAST
+    // entry on a name collision — a duplicated name would render the wrong curated message
+    // with no test failure.
+    const names = Object.values(CONTRACT_ERROR_SELECTORS).map((info) => info.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('selectors are well-formed 4-byte hex', () => {
+    for (const selector of Object.keys(CONTRACT_ERROR_SELECTORS)) {
+      expect(selector, `Malformed selector: ${selector}`).toMatch(/^0x[0-9a-f]{8}$/);
     }
   });
 
-  it('no unexpected selectors exist (catches additions without test coverage)', () => {
-    const actualSelectors = Object.keys(CONTRACT_ERROR_SELECTORS);
-    const expectedKeys = Object.keys(expectedSelectors);
-    expect(actualSelectors.sort()).toEqual(expectedKeys.sort());
+  it('every entry has a non-empty user-facing message', () => {
+    for (const [selector, info] of Object.entries(CONTRACT_ERROR_SELECTORS)) {
+      expect(info.message.length, `Empty message for ${selector} (${info.name})`).toBeGreaterThan(
+        0
+      );
+    }
   });
 });

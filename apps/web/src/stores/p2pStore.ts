@@ -2,6 +2,21 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { logger } from '@/lib/logger';
+import { isAddress, type Address } from '@/lib/types/ethereum';
+
+/**
+ * Whether a persisted value is a well-formed address.
+ *
+ * `strict: false` matches `transactionFormStore` and `lib/indexer.ts`. Strict mode rejects a
+ * mixed-case address whose casing is not a valid EIP-55 checksum, which persisted state
+ * routinely holds — and the V4 gate fails closed with no pairing, so discarding `pairedWallet`
+ * over casing strands a relayer who reloaded mid-flow: every relayed signature, including their
+ * partner's, is then rejected with no way to re-pair short of restarting. The gate compares
+ * case-insensitively, so nothing here depends on the checksum.
+ */
+function isPersistedAddress(value: unknown): value is Address {
+  return typeof value === 'string' && isAddress(value, { strict: false });
+}
 
 export type P2PConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -10,6 +25,21 @@ export interface P2PState {
   peerId: string | null;
   /** Connected partner's peer ID */
   partnerPeerId: string | null;
+  /**
+   * Wallet the local user agreed OUT OF BAND to pay for, taken from the pairing token the
+   * helper pasted (see `lib/p2p/pairingToken.ts`). Null for the party being helped, and for
+   * every non-P2P flow.
+   *
+   * SECURITY (audit V4): this is the only statement about "which wallet is being registered"
+   * that did not come from the peer. Everything on the wire — `data.form.registeree`, the
+   * `reporter` field of a stored signature — is the counterparty's own claim, so comparing a
+   * recovered signer against it compares a claim with itself. Payment is gated on the
+   * recovered signer matching THIS value instead.
+   *
+   * Persisted with the peer IDs, and for the same reason: the pairing has to survive a
+   * mid-flow reload, and losing it would silently degrade the check back to self-referential.
+   */
+  pairedWallet: Address | null;
   /** Whether connected to partner peer */
   connectedToPeer: boolean;
   /** Connection status */
@@ -23,16 +53,22 @@ export interface P2PState {
 export interface P2PActions {
   setPeerId: (peerId: string) => void;
   setPartnerPeerId: (peerId: string) => void;
+  /** Drop the pinned partner without touching the rest of the P2P state. */
+  clearPartnerPeerId: () => void;
+  /** Record the wallet named by the pasted pairing token. */
+  setPairedWallet: (address: Address) => void;
+  /** Drop the pairing expectation (pairing abandoned, refused, or restarted). */
+  clearPairedWallet: () => void;
   setConnectedToPeer: (connected: boolean) => void;
   setConnectionStatus: (status: P2PConnectionStatus, errorMessage?: string) => void;
   setInitialized: (initialized: boolean) => void;
-  setP2PValues: (values: Partial<P2PState>) => void;
   reset: () => void;
 }
 
 const initialState: P2PState = {
   peerId: null,
   partnerPeerId: null,
+  pairedWallet: null,
   connectedToPeer: false,
   connectionStatus: 'disconnected',
   errorMessage: null,
@@ -55,6 +91,27 @@ export const useP2PStore = create<P2PState & P2PActions>()(
           set((state) => {
             logger.p2p.debug('P2P partner peerId set', { peerId });
             state.partnerPeerId = peerId;
+          }),
+
+        clearPartnerPeerId: () =>
+          set((state) => {
+            if (state.partnerPeerId) {
+              logger.p2p.info('Cleared pinned partner peer', {
+                partnerPeerId: state.partnerPeerId,
+              });
+            }
+            state.partnerPeerId = null;
+          }),
+
+        setPairedWallet: (address) =>
+          set((state) => {
+            logger.p2p.info('Pairing token names the wallet to be registered', { address });
+            state.pairedWallet = address;
+          }),
+
+        clearPairedWallet: () =>
+          set((state) => {
+            state.pairedWallet = null;
           }),
 
         setConnectedToPeer: (connected) =>
@@ -82,11 +139,11 @@ export const useP2PStore = create<P2PState & P2PActions>()(
             state.isInitialized = initialized;
           }),
 
-        setP2PValues: (values) =>
-          set((state) => {
-            logger.p2p.debug('P2P values batch updated', { values });
-            Object.assign(state, values);
-          }),
+        // NOTE: there is deliberately no batch `setP2PValues`. It was a raw `Object.assign` over
+        // `Partial<P2PState>`, which meant `pairedWallet` and `partnerPeerId` could be written
+        // without going through the setters that validate them — and those two values are what
+        // the whole V4 mitigation rests on (see the `pairedWallet` note above). Nothing called
+        // it. Use the individual setters.
 
         reset: () => {
           logger.p2p.debug('P2P state reset');
@@ -96,27 +153,54 @@ export const useP2PStore = create<P2PState & P2PActions>()(
       {
         name: 'swr-p2p-state',
         version: 1,
-        migrate: (persisted) => {
-          // Validate basic shape
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
+        // partnerPeerId stays persisted on purpose: a mid-flow reload (grace period, payment
+        // step) has to come back with its partner still pinned, and the pin is the only thing
+        // that survives losing the libp2p node. The cost is that a user who closes the tab from
+        // the success screen carries the pin into their NEXT flow, where the guard would then
+        // silently reject the new partner's CONNECT. That is handled at the other end instead:
+        // each P2P page clears the pin when its node initialises while the flow is still at the
+        // pre-connection step (see `isPreConnectionStep`), which is true exactly when no partner
+        // has been agreed yet and therefore never true for a mid-flow reload.
+        //
+        // Only the durable peer identities are persisted. connectedToPeer, connectionStatus,
+        // errorMessage and isInitialized describe the current session's libp2p node, which does
+        // not survive a reload — persisting them would rehydrate a connected-looking store with
+        // no node behind it. Excluding them here means they always come from initialState.
+        partialize: (state) => ({
+          peerId: state.peerId,
+          partnerPeerId: state.partnerPeerId,
+          pairedWallet: state.pairedWallet,
+        }),
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<P2PState>;
 
-          // Ensure all required fields exist with fallbacks
-          // Note: connectionStatus, errorMessage, isInitialized, and connectedToPeer are
-          // intentionally reset to initial values on reload. These are ephemeral states
-          // that reflect the current session's P2P connection status and should not persist
-          // across browser refreshes. The libp2p node needs to be re-initialized each session,
-          // so preserving these values would be misleading.
           return {
-            peerId: state.peerId ?? initialState.peerId,
-            partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,
-            connectedToPeer: initialState.connectedToPeer, // Reset on reload
-            connectionStatus: initialState.connectionStatus,
-            errorMessage: initialState.errorMessage,
-            isInitialized: initialState.isInitialized,
+            ...current,
+            // Type-checked, not merely defaulted. `partnerPeerId` is compared against
+            // `connection.remotePeer.toString()` in `peerGuard`, so a corrupt blob holding an
+            // object or a number rehydrates cleanly, matches nothing, and then rejects every
+            // inbound stream — including the legitimate partner's CONNECT — silently and for
+            // the rest of the session.
+            peerId: typeof state.peerId === 'string' ? state.peerId : initialState.peerId,
+            partnerPeerId:
+              typeof state.partnerPeerId === 'string'
+                ? state.partnerPeerId
+                : initialState.partnerPeerId,
+            // Re-validated rather than trusted: a corrupt or hand-edited entry must not become
+            // the address a payment is authorized against.
+            pairedWallet: isPersistedAddress(state.pairedWallet)
+              ? state.pairedWallet
+              : initialState.pairedWallet,
           };
         },
       }
@@ -124,3 +208,14 @@ export const useP2PStore = create<P2PState & P2PActions>()(
     { name: 'P2PStore', enabled: process.env.NODE_ENV === 'development' }
   )
 );
+
+/**
+ * True at the steps where no partner has been agreed yet, so any persisted `partnerPeerId`
+ * is a leftover from an abandoned session rather than something to restore.
+ *
+ * Both the wallet and transaction P2P flows call their pre-connection step
+ * 'wait-for-connection'; a null step means the flow has not started at all.
+ */
+export function isPreConnectionStep(step: string | null | undefined): boolean {
+  return !step || step === 'wait-for-connection';
+}

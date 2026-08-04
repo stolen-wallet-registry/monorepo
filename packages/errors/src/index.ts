@@ -32,10 +32,15 @@ export type { ContractErrorInfo } from './selectors';
 // ERROR SELECTORS
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { CONTRACT_ERROR_MAP, CONTRACT_ERROR_SELECTORS } from './selectors';
+export { CONTRACT_ERROR_BY_NAME, CONTRACT_ERROR_MAP, CONTRACT_ERROR_SELECTORS } from './selectors';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ERROR DECODING
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { decodeContractError, getContractErrorInfo, sanitizeErrorMessage } from './decode';
+export {
+  decodeContractError,
+  decodeContractErrorFromError,
+  getContractErrorInfo,
+  sanitizeErrorMessage,
+} from './decode';

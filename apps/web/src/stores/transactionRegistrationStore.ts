@@ -54,6 +54,43 @@ const VALID_REGISTRATION_TYPES: TransactionRegistrationType[] = [
   'p2pRelay',
 ];
 
+// MUST be declared BEFORE the create() call below. zustand's persist middleware hydrates
+// synchronously for localStorage, so `merge` runs during module evaluation — a reference to
+// a `const` declared later in the file throws a temporal-dead-zone ReferenceError, which
+// zustand silently swallows, and the store NEVER rehydrates persisted state (every mid-flow
+// reload silently reset to defaults before this was hoisted).
+export const TX_STEP_SEQUENCES: Record<TransactionRegistrationType, TransactionRegistrationStep[]> =
+  {
+    standard: [
+      'select-transactions',
+      'acknowledge-sign',
+      'acknowledge-pay',
+      'grace-period',
+      'register-sign',
+      'register-pay',
+      'success',
+    ],
+    selfRelay: [
+      'select-transactions',
+      'acknowledge-sign',
+      'switch-and-pay-ack',
+      'grace-period',
+      'register-sign',
+      'switch-and-pay-reg',
+      'success',
+    ],
+    p2pRelay: [
+      'wait-for-connection',
+      'select-transactions',
+      'acknowledge-sign',
+      'acknowledgement-payment',
+      'grace-period',
+      'register-sign',
+      'registration-payment',
+      'success',
+    ],
+  };
+
 export const useTransactionRegistrationStore = create<
   TransactionRegistrationState & TransactionRegistrationActions
 >()(
@@ -119,9 +156,17 @@ export const useTransactionRegistrationStore = create<
       {
         name: 'swr-transaction-registration-state',
         version: 1,
-        migrate: (persisted) => {
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
+        // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
+        // mismatch, so validation placed there would never run on a normal rehydrate.
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
           const state = persisted as Partial<TransactionRegistrationState>;
           const isValidRegistrationType =
@@ -137,6 +182,7 @@ export const useTransactionRegistrationStore = create<
             state.step === null ||
             (state.step && validSteps.includes(state.step as TransactionRegistrationStep));
           return {
+            ...current,
             registrationType: finalRegistrationType,
             step: isValidStep
               ? (state.step as TransactionRegistrationStep | null)
@@ -165,38 +211,6 @@ function getInitialStep(type: TransactionRegistrationType): TransactionRegistrat
   }
 }
 
-export const TX_STEP_SEQUENCES: Record<TransactionRegistrationType, TransactionRegistrationStep[]> =
-  {
-    standard: [
-      'select-transactions',
-      'acknowledge-sign',
-      'acknowledge-pay',
-      'grace-period',
-      'register-sign',
-      'register-pay',
-      'success',
-    ],
-    selfRelay: [
-      'select-transactions',
-      'acknowledge-sign',
-      'switch-and-pay-ack',
-      'grace-period',
-      'register-sign',
-      'switch-and-pay-reg',
-      'success',
-    ],
-    p2pRelay: [
-      'wait-for-connection',
-      'select-transactions',
-      'acknowledge-sign',
-      'acknowledgement-payment',
-      'grace-period',
-      'register-sign',
-      'registration-payment',
-      'success',
-    ],
-  };
-
 export function getTxNextStep(
   type: TransactionRegistrationType,
   currentStep: TransactionRegistrationStep
@@ -207,6 +221,24 @@ export function getTxNextStep(
     return null;
   }
   return sequence[currentIndex + 1] ?? null;
+}
+
+/**
+ * Previous step in the sequence, or null at the start.
+ *
+ * Used by the pay steps to send the user back to sign after a revert that invalidated the
+ * stored signature — retrying such a transaction resubmits identical bytes forever.
+ */
+export function getTxPreviousStep(
+  type: TransactionRegistrationType,
+  currentStep: TransactionRegistrationStep
+): TransactionRegistrationStep | null {
+  const sequence = TX_STEP_SEQUENCES[type];
+  const currentIndex = sequence.indexOf(currentStep);
+  if (currentIndex <= 0) {
+    return null;
+  }
+  return sequence[currentIndex - 1] ?? null;
 }
 
 // Selectors

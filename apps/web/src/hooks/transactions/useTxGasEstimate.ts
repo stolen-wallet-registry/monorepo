@@ -58,6 +58,11 @@ export interface UseTxGasEstimateParams {
   transactionHashes?: Hash[];
   /** Chain IDs for each transaction - for registration */
   chainIds?: Hash[];
+  /**
+   * Block whose hash the registration signature committed to (hub registration only).
+   * Must be the value that was signed, or the estimate reverts where the real call would too.
+   */
+  windowBlock?: bigint;
   /** Parsed signature components */
   signature?: {
     v: number;
@@ -104,6 +109,7 @@ export function useTxGasEstimate({
   transactionCount,
   transactionHashes,
   chainIds,
+  windowBlock,
   signature,
   value,
   enabled = true,
@@ -159,6 +165,7 @@ export function useTxGasEstimate({
     step === 'registration' &&
     !!reporter &&
     deadline !== undefined &&
+    windowBlock !== undefined &&
     !!transactionHashes?.length &&
     !!chainIds?.length &&
     !!signature;
@@ -237,8 +244,16 @@ export function useTxGasEstimate({
         });
       }
 
-      if (hasHubRegParams && reporter && deadline !== undefined && transactionHashes && chainIds) {
-        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s)
+      if (
+        hasHubRegParams &&
+        reporter &&
+        deadline !== undefined &&
+        windowBlock !== undefined &&
+        transactionHashes &&
+        chainIds
+      ) {
+        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, windowBlock,
+        //                           v, r, s)
         return encodeFunctionData({
           abi: transactionRegistryAbi,
           functionName: 'registerTransactions',
@@ -247,6 +262,7 @@ export function useTxGasEstimate({
             deadline,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,
@@ -259,11 +275,13 @@ export function useTxGasEstimate({
         reportedChainId &&
         deadline !== undefined &&
         nonce !== undefined &&
+        windowBlock !== undefined &&
         reporter &&
         transactionHashes &&
         chainIds
       ) {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        //                                 transactionHashes, chainIds, windowBlock, v, r, s)
         return encodeFunctionData({
           abi: spokeRegistryAbi,
           functionName: 'registerTransactionBatch',
@@ -274,6 +292,7 @@ export function useTxGasEstimate({
             reporter,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,
@@ -302,6 +321,7 @@ export function useTxGasEstimate({
     transactionCount,
     transactionHashes,
     chainIds,
+    windowBlock,
     signature,
     hasAllParams,
     hasHubAckParams,

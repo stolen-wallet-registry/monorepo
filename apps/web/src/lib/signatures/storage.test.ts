@@ -8,7 +8,7 @@ import {
   type StoredSignature,
 } from './storage';
 import { SIGNATURE_STEP } from './eip712';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 describe('signature storage', () => {
   const testAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
@@ -338,5 +338,123 @@ describe('signature storage', () => {
       expect(retrievedReg!.nonce).toBe(1n);
       expect(retrievedReg!.deadline).toBe(200n);
     });
+  });
+});
+
+describe('forwarder binding', () => {
+  const ADDRESS = `0x${'a'.repeat(40)}` as Address;
+  const FORWARDER = `0x${'b'.repeat(40)}` as Address;
+  const OTHER_FORWARDER = `0x${'c'.repeat(40)}` as Address;
+
+  function store(trustedForwarder?: Address) {
+    storeSignature({
+      signature: `0x${'d'.repeat(130)}`,
+      deadline: 1_900_000_000n,
+      nonce: 1n,
+      address: ADDRESS,
+      chainId: 8453,
+      step: SIGNATURE_STEP.REGISTRATION,
+      storedAt: Date.now(),
+      trustedForwarder,
+      reportedChainId: 8453n,
+      incidentTimestamp: 0n,
+    });
+  }
+
+  // The storage key is address+chainId+step, so a self-relay user who backs out and edits the
+  // gas wallet after signing used to get the SAME cached signature handed back and submitted
+  // against the NEW forwarder — an opaque signature-verification revert instead of "re-sign".
+  it('does not return a signature signed for a different forwarder', () => {
+    store(FORWARDER);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, OTHER_FORWARDER)).toBeNull();
+  });
+
+  // Positive path: the matching forwarder still gets its signature, so the check above is not
+  // simply rejecting everything.
+  it('returns the signature when the forwarder matches', () => {
+    store(FORWARDER);
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found).not.toBeNull();
+    expect(found?.trustedForwarder?.toLowerCase()).toBe(FORWARDER.toLowerCase());
+  });
+
+  it('matches case-insensitively', () => {
+    store(FORWARDER.toUpperCase().replace('0X', '0x') as Address);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).not.toBeNull();
+  });
+
+  // A signature stored before this field existed cannot be checked, so it is treated as a
+  // miss when a forwarder is expected — re-signing is cheap, an unexplained revert is not.
+  it('rejects a legacy signature with no stored forwarder when one is expected', () => {
+    store(undefined);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+    // ...but callers that do not care still get it.
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION)).not.toBeNull();
+  });
+
+  it('leaves the mismatched signature in storage so switching back recovers it', () => {
+    store(FORWARDER);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, OTHER_FORWARDER)).toBeNull();
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).not.toBeNull();
+  });
+});
+
+describe('window block commitment', () => {
+  const ADDRESS = `0x${'a'.repeat(40)}` as Address;
+  const FORWARDER = `0x${'b'.repeat(40)}` as Address;
+  const WINDOW_BLOCK_HASH = `0x${'ab'.repeat(32)}` as Hash;
+
+  function store(overrides: Partial<StoredSignature> = {}) {
+    storeSignature({
+      signature: `0x${'d'.repeat(130)}`,
+      deadline: 1_900_000_000n,
+      nonce: 1n,
+      address: ADDRESS,
+      chainId: 8453,
+      step: SIGNATURE_STEP.REGISTRATION,
+      storedAt: Date.now(),
+      trustedForwarder: FORWARDER,
+      reportedChainId: 8453n,
+      incidentTimestamp: 0n,
+      windowBlock: 4242n,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+      ...overrides,
+    });
+  }
+
+  // The pay step submits windowBlock verbatim; a lossy round-trip is an on-chain revert.
+  it('round-trips the block number and hash as BigInt/hex', () => {
+    store();
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found?.windowBlock).toBe(4242n);
+    expect(found?.windowBlockHash).toBe(WINDOW_BLOCK_HASH);
+  });
+
+  // Block 0 has no usable hash, so a zero here is corruption rather than a valid commitment.
+  it('discards a signature whose stored window block is zero', () => {
+    store({ windowBlock: 0n });
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+  });
+
+  it('discards a signature whose stored window block hash is not bytes32', () => {
+    store({ windowBlockHash: '0xdeadbeef' as Hash });
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+  });
+
+  // Acknowledgement signatures carry no freshness commitment and must still be retrievable.
+  it('accepts a signature with no window block at all', () => {
+    store({ windowBlock: undefined, windowBlockHash: undefined });
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found).not.toBeNull();
+    expect(found?.windowBlock).toBeUndefined();
   });
 });

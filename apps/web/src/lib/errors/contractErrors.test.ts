@@ -3,106 +3,25 @@ import { describe, it, expect } from 'vitest';
 import { decodeContractError, getContractErrorInfo, CONTRACT_ERROR_MAP } from './contractErrors';
 
 describe('contractErrors', () => {
-  // Expected selectors for curated runtime errors - used for coverage validation.
-  // Note: Some errors are declared in interfaces but never reverted by current implementations,
-  // so they are intentionally excluded from this list and from CONTRACT_ERROR_MAP.
-  const expectedSelectors: Record<string, string> = {
-    // FraudRegistryHub Errors
-    FraudRegistryHub__ZeroAddress: '0x92788ffd',
-    FraudRegistryHub__OnlyInbox: '0x25da34a1',
-    FraudRegistryHub__InvalidIdentifierLength: '0xf6c88e35',
-    FraudRegistryHub__WithdrawFailed: '0x7fa366d3',
-    // WalletRegistry Errors
-    WalletRegistry__AlreadyRegistered: '0xa74e7b8b',
-    WalletRegistry__AlreadyAcknowledged: '0x133ee0d6',
-    WalletRegistry__DeadlineExpired: '0x5915fdb8',
-    WalletRegistry__DeadlineInPast: '0x5bc89f7d',
-    WalletRegistry__GracePeriodNotStarted: '0x3214c145',
-    WalletRegistry__InvalidSignature: '0xbf69e113',
-    WalletRegistry__InvalidForwarder: '0x30866145',
-    WalletRegistry__InsufficientFee: '0x747dde89',
-    WalletRegistry__ZeroAddress: '0xa6565bcd',
-    WalletRegistry__OnlyHub: '0x31a0af95',
-    WalletRegistry__OnlyOperatorSubmitter: '0x637b467b',
-    WalletRegistry__EmptyBatch: '0x39f0ba50',
-    WalletRegistry__ArrayLengthMismatch: '0x545fd576',
-    WalletRegistry__FeeTransferFailed: '0x0a17bc56',
-    WalletRegistry__RefundFailed: '0x4e71ab39',
-    WalletRegistry__InvalidNonce: '0x5934e5e0',
-    WalletRegistry__InvalidStep: '0x48193183',
-    // TransactionRegistry Errors
-    TransactionRegistry__AlreadyAcknowledged: '0x378855ef',
-    TransactionRegistry__DeadlineExpired: '0x2015cf13',
-    TransactionRegistry__DeadlineInPast: '0x98de1e59',
-    TransactionRegistry__GracePeriodNotStarted: '0xe4fcb386',
-    TransactionRegistry__InvalidSignature: '0x6376fd7d',
-    TransactionRegistry__InvalidForwarder: '0x11780b54',
-    TransactionRegistry__InsufficientFee: '0xe0ff51d7',
-    TransactionRegistry__ZeroAddress: '0xd6a30fe5',
-    TransactionRegistry__OnlyHub: '0x6b588216',
-    TransactionRegistry__OnlyOperatorSubmitter: '0x40064f87',
-    TransactionRegistry__EmptyBatch: '0x1f86fd29',
-    TransactionRegistry__ArrayLengthMismatch: '0x85758e90',
-    TransactionRegistry__DataHashMismatch: '0x97606fef',
-    TransactionRegistry__InvalidStep: '0xef0b2ab3',
-    TransactionRegistry__HubTransferFailed: '0xc6eb8cd2',
-    TransactionRegistry__RefundFailed: '0xef7a7943',
-    // ContractRegistry Errors
-    ContractRegistry__ZeroAddress: '0x047c1f80',
-    ContractRegistry__OnlyOperatorSubmitter: '0xc00e0835',
-    ContractRegistry__EmptyBatch: '0xcd74ea8c',
-    ContractRegistry__ArrayLengthMismatch: '0x0fc15e9d',
-    // OperatorSubmitter Errors
-    OperatorSubmitter__ZeroAddress: '0x13664080',
-    OperatorSubmitter__NotApprovedOperator: '0xbfd711b2',
-    OperatorSubmitter__EmptyBatch: '0x0f0c34f7',
-    OperatorSubmitter__ArrayLengthMismatch: '0x15c1e4ff',
-    OperatorSubmitter__InsufficientFee: '0x030ff595',
-    OperatorSubmitter__FeeForwardFailed: '0x58614d91',
-    OperatorSubmitter__RefundFailed: '0xb951fb83',
-    OperatorSubmitter__InvalidFeeConfig: '0x0079d758',
-    // CAIP-10 parsing errors
-    CAIP10__InvalidFormat: '0xfd0a5b1e',
-    CAIP10__UnsupportedNamespace: '0x96c95b05',
-    CAIP10Evm__InvalidAddress: '0x31d8ad42',
-    // CrossChainMessage Library Errors
-    CrossChainMessage__InvalidMessageType: '0xd5fd8f7a',
-    CrossChainMessage__UnsupportedVersion: '0x57d73aa3',
-    CrossChainMessage__InvalidMessageLength: '0x2019eeca',
-    CrossChainMessage__BatchSizeMismatch: '0x315ba0c5',
-    // CrossChainInbox Errors
-    CrossChainInbox__ZeroAddress: '0x6d50853e',
-    CrossChainInbox__OnlyMailbox: '0x4babc769',
-    CrossChainInbox__UntrustedSource: '0x7d60d71c',
-    CrossChainInbox__SourceChainMismatch: '0x249d64fe',
-    CrossChainInbox__UnknownMessageType: '0x2f5f5948',
-    // SpokeRegistry Errors
-    SpokeRegistry__ZeroAddress: '0xc718cb18',
-    SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
-    SpokeRegistry__InvalidOwner: '0x664e4519',
-    SpokeRegistry__SignatureExpired: '0xcd4e1023',
-    SpokeRegistry__InvalidNonce: '0x8a2ee99e',
-    SpokeRegistry__InvalidSigner: '0xae315749',
-    SpokeRegistry__InvalidForwarder: '0x18a34ddf',
-    SpokeRegistry__GracePeriodNotStarted: '0xa5434e70',
-    SpokeRegistry__ForwarderExpired: '0x9525dee7',
-    SpokeRegistry__HubNotConfigured: '0x4160d098',
-    SpokeRegistry__InsufficientFee: '0x6151896c',
-    SpokeRegistry__RefundFailed: '0x28bcfd67',
-    SpokeRegistry__WithdrawalFailed: '0xa8682eaf',
-    SpokeRegistry__InvalidHubConfig: '0x6f59b28e',
-    SpokeRegistry__EmptyBatch: '0xe3e9689e',
-    SpokeRegistry__ArrayLengthMismatch: '0x81a72855',
-    SpokeRegistry__InvalidDataHash: '0xba8873e4',
-    SpokeRegistry__InvalidStep: '0xbefa3abb',
-    SpokeRegistry__DataMismatch: '0x9de3b4a9',
-  };
+  // NOTE: this file deliberately does NOT mirror the error catalogue.
+  //
+  // It used to carry an `expectedSelectors` map naming every curated error — a third copy of
+  // the same bookkeeping (packages/errors/src/selectors.ts being the source, and
+  // decode.test.ts having carried a second). Its own comment conceded the weakness: it
+  // "does NOT verify selectors match compiled ABIs", so it could only catch typos in itself
+  // while a real rename in Solidity slipped through all three copies.
+  //
+  // Catalogue coverage is now asserted in packages/errors/src/coverage.test.ts, which DERIVES
+  // the expected set from the generated ABIs: every ABI error must be curated or explicitly
+  // excluded, every selector must match the real signature, and no entry may reference an
+  // error that no longer exists. What remains here is only what is specific to this package:
+  // that apps/web's re-export wiring works.
 
   describe('CONTRACT_ERROR_MAP', () => {
-    it('contains at least all expected errors', () => {
-      // Self-maintaining: threshold tracks the curated expectedSelectors list
-      const expectedCount = Object.keys(expectedSelectors).length;
-      expect(Object.keys(CONTRACT_ERROR_MAP).length).toBeGreaterThanOrEqual(expectedCount);
+    it('is populated (guards against a broken re-export)', () => {
+      // A non-vacuous floor: if the @swr/errors re-export silently resolved to an empty
+      // object, every other assertion in this file would pass trivially.
+      expect(Object.keys(CONTRACT_ERROR_MAP).length).toBeGreaterThan(50);
     });
 
     it('all selectors are lowercase 4-byte hex', () => {
@@ -237,30 +156,6 @@ Version: viem@2.41.2`;
       const info = getContractErrorInfo('0xdeadbeef');
 
       expect(info).toBeUndefined();
-    });
-  });
-
-  describe('expected selector coverage', () => {
-    // Verify CONTRACT_ERROR_MAP has entries for all expected selectors.
-    // Note: This does NOT verify selectors match compiled ABIs - it only ensures
-    // the curated expectedSelectors list is covered in CONTRACT_ERROR_MAP.
-    // If contract error signatures change, update expectedSelectors manually.
-
-    it.each(Object.entries(expectedSelectors))(
-      '%s has entry in CONTRACT_ERROR_MAP with selector %s',
-      (errorName, expectedSelector) => {
-        const info = CONTRACT_ERROR_MAP[expectedSelector];
-        expect(info).toBeDefined();
-        expect(info!.name).toBe(errorName);
-      }
-    );
-
-    it('has no duplicate selectors (object literal guard)', () => {
-      // JavaScript object literals silently override duplicate keys.
-      // This test verifies the source of truth (expectedSelectors) has unique values.
-      const selectors = Object.values(expectedSelectors);
-      const uniqueSelectors = new Set(selectors);
-      expect(uniqueSelectors.size).toBe(selectors.length);
     });
   });
 });

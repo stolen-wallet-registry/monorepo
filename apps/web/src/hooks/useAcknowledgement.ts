@@ -126,9 +126,13 @@ export function useAcknowledgement(): UseAcknowledgementResult {
 
       // Both hub and spoke acknowledge are nonpayable (fees collected at register)
       const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
+      // Pin the transaction to the chain the contract address was resolved for. Without this,
+      // wagmi submits to whatever chain the connector currently sits on, so a mid-flow chain
+      // switch would send the write to the wrong chain against a stale address.
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
+        chainId,
         functionName: 'acknowledge',
         args,
       });

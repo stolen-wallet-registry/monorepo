@@ -17,7 +17,7 @@ import {
   type RawRecentTransactionsResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
-import { INDEXER_URL } from '@/lib/indexer';
+import { INDEXER_URL, parseIndexerAddress, parseIndexerHash } from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 /** Registration entry type */
@@ -147,32 +147,46 @@ export function useRecentRegistrations(
       // Process wallets
       if (walletsRes) {
         for (const raw of walletsRes.stolenWallets.items) {
-          // Extract chain ID and address from CAIP-10 (format: eip155:chainId:address)
+          // The chain badge comes from `reportedChainCAIP2` (where the theft was reported),
+          // NOT from `caip10`.
+          //
+          // A registered wallet is stolen on EVERY EVM chain, so the indexer stores its
+          // identifier in the CAIP-2 wildcard form `eip155:*:0x…` — matching how CAIP10.sol
+          // builds the on-chain key. Parsing a chain out of that yields the literal `*`, which
+          // is not a chain: it rendered as a globe icon labelled "eip155:*" with no explorer
+          // link. `reportedChainCAIP2` is the real, specific chain and is what a reader wants
+          // here; `sourceChainCAIP2` (the spoke a cross-chain registration arrived from) is the
+          // next best answer when the reported chain could not be resolved.
+          //
+          // When neither resolves, fall back to the wildcard from `caip10` (e.g. `eip155:*`),
+          // which the table renders as "All EVM chains". That is the honest statement — the
+          // wallet IS stolen everywhere in that namespace and we simply do not know where it
+          // was reported. The previous code defaulted to `eip155:1` instead, labelling such
+          // rows "Ethereum" and linking to an Etherscan page for a chain the wallet was never
+          // reported on, which is worse than saying nothing.
           const caip10Parts = raw.caip10.split(':');
-          let chainId: string;
-          let walletAddress: string;
+          const wildcardChainId =
+            caip10Parts[0] && caip10Parts[1] ? `${caip10Parts[0]}:${caip10Parts[1]}` : 'eip155:*';
+          const chainId = raw.reportedChainCAIP2 ?? raw.sourceChainCAIP2 ?? wildcardChainId;
 
-          if (caip10Parts.length >= 3 && caip10Parts[0] && caip10Parts[1] && caip10Parts[2]) {
-            chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
-            walletAddress = caip10Parts[2];
-          } else if (caip10Parts.length >= 2 && caip10Parts[0] && caip10Parts[1]) {
-            chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
-            walletAddress = raw.id; // Fallback to raw.id if address part missing
-          } else {
-            logger.contract.debug('Fallback to eip155:1 for wallet', { caip10: raw.caip10 });
-            chainId = 'eip155:1';
-            walletAddress = raw.id;
-          }
+          // `id` is the full bytes32 identifier, so it is not an address. `walletAddress` is
+          // populated for every EVM wallet and is null only for a non-EVM identifier, which
+          // has no address form to show.
+          const walletAddress = raw.walletAddress ?? raw.id;
 
           entries.push({
             id: raw.id,
             type: 'wallet',
             identifier: walletAddress,
             chainId,
-            operator: raw.operator as Address | undefined,
+            // Parsed, not asserted. `operator` and `transactionHash` are optional on
+            // RecentRegistration, so a value the indexer sent in an unexpected shape becomes
+            // absent — which every consumer already handles — instead of being asserted into
+            // the type system and surfacing later as a broken explorer link on a fraud record.
+            operator: parseIndexerAddress(raw.operator),
             isSponsored: raw.isSponsored,
             registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            transactionHash: parseIndexerHash(raw.transactionHash),
             batchId: raw.batchId,
           });
         }
@@ -186,7 +200,7 @@ export function useRecentRegistrations(
             type: 'contract',
             identifier: raw.contractAddress,
             chainId: raw.caip2ChainId,
-            operator: raw.operator as Address,
+            operator: parseIndexerAddress(raw.operator),
             isSponsored: false, // Operator submissions are never "sponsored"
             registeredAt: BigInt(raw.reportedAt),
             // Note: batchId is not a tx hash; contracts don't have individual tx hashes
@@ -211,10 +225,10 @@ export function useRecentRegistrations(
             type: 'transaction',
             identifier: raw.txHash,
             chainId: txChainId,
-            reporter: raw.reporter as Address,
+            reporter: parseIndexerAddress(raw.reporter),
             isSponsored: false, // Individual tx entries don't track sponsorship
             registeredAt: BigInt(raw.reportedAt),
-            transactionHash: raw.txHash as Hash,
+            transactionHash: parseIndexerHash(raw.txHash),
             // Resolve batchId: prefer direct value, fall back to lookup via transactionHash
             batchId: raw.batchId ?? txHashToBatchId.get(raw.transactionHash),
           });

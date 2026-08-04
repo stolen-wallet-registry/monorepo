@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isEnsName, detectSearchTypeWithEns } from './ens';
+import { isEnsName, detectSearchTypeWithEns, isDisplaySafeEnsName } from './ens';
 
 describe('isEnsName', () => {
   it('returns true for valid ENS names', () => {
@@ -108,5 +108,86 @@ describe('detectSearchTypeWithEns', () => {
       // @ts-expect-error - testing invalid input
       expect(detectSearchTypeWithEns(undefined)).toBe('invalid');
     });
+  });
+});
+
+describe('isDisplaySafeEnsName', () => {
+  // A resolved ENS name is attacker-controlled: anyone can register a name, point it at their
+  // own wallet, and set the reverse record. Wherever the UI substitutes that name for a hex
+  // address in a slot used to decide whom to trust, the attacker chooses what that slot says.
+
+  it('accepts an ordinary name', () => {
+    expect(isDisplaySafeEnsName('vitalik.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('dao.vitalik.eth')).toBe(true);
+  });
+
+  it('rejects a name shaped like a hex address', () => {
+    // The vector that makes the normalization gate insufficient on its own: pure ASCII,
+    // fully ENSIP-15-valid, registerable today, and normalize() returns it unchanged. In an
+    // address slot it reads as a hex address while resolving to the attacker's wallet.
+    expect(isDisplaySafeEnsName('0xd8da6bf26964af9d7eed9e03e53415d37aa96045.eth')).toBe(false);
+  });
+
+  it('rejects a name impersonating a truncated address', () => {
+    // Addresses are usually shown truncated, so a short hex prefix is enough to impersonate.
+    expect(isDisplaySafeEnsName('0xd8da6b.eth')).toBe(false);
+  });
+
+  // The consecutive-nibble regex was bypassable: hyphens are ENS-legal, so an attacker could
+  // break the run of six hex characters while the name still reads as an address. These names
+  // normalize to themselves and carry no bidi controls, so nothing else in the function stops
+  // them. The rule is applied with `-`, `_` and `.` removed.
+  it('rejects hex-address shapes that use separators to break the nibble run', () => {
+    expect(isDisplaySafeEnsName('0x-d8da6bf269c7bb.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x-d8da-6bf2-69c7.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x_d8da_6bf2_69c7.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x.d8da6bf269c7bb.eth')).toBe(false);
+  });
+
+  // A single non-hex character is enough to break the consecutive run while the string still
+  // reads as an address at a glance, so a mostly-hex body after `0x` is also rejected.
+  it('rejects a name that is overwhelmingly hex after a 0x prefix', () => {
+    expect(isDisplaySafeEnsName('0xd8da6bf2z69c7bb.eth')).toBe(false);
+  });
+
+  // The tightening must not swallow ordinary names. These all still resolve and display.
+  it('accepts legitimate names that merely start with 0x or contain hex letters', () => {
+    expect(isDisplaySafeEnsName('0xproject.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('0xdao.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('0xsecurity-research.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('decaf.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('cafe-babe.eth')).toBe(true);
+  });
+
+  // Documents a KNOWN false positive rather than asserting it is desirable. `0xdecaf.eth` is
+  // a plausible real name, but with separators stripped its first six post-`0x` characters
+  // (d,e,c,a,f,e — the trailing `e` coming from the `.eth` label) are all hex nibbles, so the
+  // address-shape rule fires. The trade is deliberate: the cost is one legitimate name falling
+  // back to its hex address, and the alternative is letting a truncated-address impersonation
+  // through. Pinned so that any future loosening has to confront this case explicitly.
+  it('also rejects some legitimate names whose leading characters are all hex (known trade-off)', () => {
+    expect(isDisplaySafeEnsName('0xdecaf.eth')).toBe(false);
+  });
+
+  it('rejects a name that is not its own normalized form', () => {
+    // Uppercase does not survive ENSIP-15 normalization, so displaying it would show
+    // something other than the name that actually resolves.
+    expect(isDisplaySafeEnsName('Vitalik.eth')).toBe(false);
+  });
+
+  it('rejects names carrying bidirectional control characters', () => {
+    // RLO reorders the text around it, letting a name rewrite the sentence it sits in.
+    expect(isDisplaySafeEnsName('‮kcatta.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('safe⁦name.eth')).toBe(false);
+  });
+
+  it('rejects names that cannot be normalized at all', () => {
+    expect(isDisplaySafeEnsName(' .eth')).toBe(false);
+  });
+
+  it('rejects empty and absent names', () => {
+    expect(isDisplaySafeEnsName(null)).toBe(false);
+    expect(isDisplaySafeEnsName(undefined)).toBe(false);
+    expect(isDisplaySafeEnsName('')).toBe(false);
   });
 });

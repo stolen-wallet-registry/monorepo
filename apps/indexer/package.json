@@ -4,26 +4,34 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "ponder dev --schema swr_dev",
-    "start": "ponder start --schema swr_prod",
+    "codegen": "ponder codegen",
     "db": "ponder db",
     "db:wipe": "rm -rf .ponder && echo 'PGlite data wiped (.ponder folder deleted)'",
     "db:wipe:postgres": "psql postgresql://postgres:password@localhost:5432/postgres -c 'DROP SCHEMA IF EXISTS ponder_sync CASCADE; DROP SCHEMA IF EXISTS swr_indexer CASCADE; DROP SCHEMA IF EXISTS swr_dev CASCADE; DROP SCHEMA IF EXISTS swr_prod CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'",
-    "codegen": "ponder codegen",
+    "dev": "ponder dev --schema swr_dev",
+    "lint": "eslint .",
+    "start": "node gateway.mjs",
+    "start:ponder-unfiltered": "ponder start --schema swr_prod",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc"
   },
   "dependencies": {
     "@swr/abis": "workspace:*",
     "@swr/chains": "workspace:*",
-    "hono": "^4.11.7",
+    "hono": "^4.12.33",
     "ponder": "^0.16.1",
     "viem": "^2.41.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.2",
-    "typescript": "~5.9.3"
+    "eslint": "^9.39.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.1.10"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.12.0 <23"
   }
 }

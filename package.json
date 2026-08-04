@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "preinstall": "node -e \"const v=process.versions.node,m=+v.split('.')[0];if(process.env.SWR_SKIP_NODE_CHECK)process.exit(0);if(m!==22){console.error('\\n\\u001b[31m\\u2716 Node '+v+' detected — this repo requires Node 22 (see .nvmrc).\\u001b[0m\\n\\n  Node 24+ ships experimental Web Storage that shadows jsdom, and apps/web/src/test/setup.ts\\n  fails loudly rather than run 49 test files against the wrong globals.\\n\\n  Fix:  nvm use            (or: nvm install 22 && nvm use 22)\\n  Skip: SWR_SKIP_NODE_CHECK=1 pnpm install\\n');process.exit(1)}\"",
     "dev": "turbo dev --filter=web --filter=landing --filter=@swr/docs",
     "dev:web": "pnpm --filter web dev",
     "dev:landing": "pnpm --filter landing dev",
@@ -13,6 +14,8 @@
     "test": "turbo test",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "doctor:changed": "react-doctor -y --include-untracked --no-supply-chain --no-dead-code --scope changed",
+    "doctor:full": "react-doctor -y --no-dead-code",
     "forge:build": "pnpm --filter @swr/contracts build",
     "forge:test": "pnpm --filter @swr/contracts test",
     "forge:fmt": "pnpm --filter @swr/contracts format",
@@ -23,6 +26,7 @@
     "forge:update": "cd packages/contracts && forge update",
     "forge:clean": "cd packages/contracts && forge clean",
     "forge:slither": "pnpm --filter @swr/contracts slither",
+    "export-abi": "turbo run export-abi && prettier --write \"packages/abis/src/*.ts\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm forge:fmt",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm --filter @swr/contracts lint:fmt",
     "check": "turbo lint typecheck test && pnpm format:check && pnpm syncpack:check && pnpm knip",
@@ -35,18 +39,18 @@
     "storybook:landing": "pnpm --filter landing storybook",
     "build-storybook": "turbo build-storybook",
     "anvil": "anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13",
-    "anvil:crosschain": "concurrently -k -n hub,spoke,relay -c blue,green,yellow \"anvil -p 8545 --chain-id 31337 --block-time 12 --load-state .anvil-state/hub.json\" \"anvil -p 8546 --chain-id 31338 --block-time 12 --load-state .anvil-state/spoke.json\" \"sleep 3 && NODE_TLS_REJECT_UNAUTHORIZED=0 dotenv -e packages/contracts/.env -- hyperlane relayer --chains anvilhub,anvilspoke\"",
-    "hyperlane:deploy": "dotenv -e packages/contracts/.env -- hyperlane core deploy --config .hyperlane/core-config.yaml",
-    "hyperlane:init": "dotenv -e packages/contracts/.env -- hyperlane registry init",
+    "anvil:crosschain": "concurrently -k -n hub,spoke,relay -c blue,green,yellow \"anvil -p 8545 --chain-id 31337 --block-time 12 --load-state .anvil-state/hub.json\" \"anvil -p 8546 --chain-id 31338 --block-time 12 --load-state .anvil-state/spoke.json\" \"sleep 3 && NODE_TLS_REJECT_UNAUTHORIZED=0 dotenv -e packages/contracts/.env -- hyperlane relayer --chains anvilhub,anvilspoke --registry ./.hyperlane\"",
+    "hyperlane:deploy": "dotenv -e packages/contracts/.env -- hyperlane core deploy --config .hyperlane/core-config.yaml --registry ./.hyperlane",
+    "hyperlane:init": "dotenv -e packages/contracts/.env -- hyperlane registry init --registry ./.hyperlane",
     "deploy:dev": "pnpm --filter @swr/contracts deploy:local",
-    "deploy:v2": "pnpm --filter @swr/contracts deploy:v2:local",
-    "deploy:v2:testnet": "pnpm --filter @swr/contracts deploy:v2:testnet",
     "deploy:crosschain": "pnpm --filter @swr/contracts deploy:crosschain",
-    "deploy:crosschain:v2": "pnpm --filter @swr/contracts deploy:crosschain:v2",
     "seed:transactions": "pnpm --filter @swr/contracts seed:transactions",
     "deploy:testnet:hub": "pnpm --filter @swr/contracts deploy:testnet:hub",
     "deploy:testnet:spoke": "pnpm --filter @swr/contracts deploy:testnet:spoke",
-    "deploy:testnet:trust": "pnpm --filter @swr/contracts deploy:testnet:trust",
+    "finalize:testnet:hub": "pnpm --filter @swr/contracts finalize:testnet:hub",
+    "verify:setup:testnet:hub": "pnpm --filter @swr/contracts verify:setup:testnet:hub",
+    "finalize:testnet:spoke": "pnpm --filter @swr/contracts finalize:testnet:spoke",
+    "verify:setup:testnet:spoke": "pnpm --filter @swr/contracts verify:setup:testnet:spoke",
     "dev:crosschain": "cross-env VITE_CROSSCHAIN=true pnpm dev:web",
     "dev:testnet": "cross-env VITE_TESTNET=true pnpm dev:web",
     "relay": "pnpm --filter @swr/relay dev",
@@ -72,18 +76,23 @@
     "knip": "^5.73.0",
     "lint-staged": "^15.2.10",
     "prettier": "^3.4.2",
+    "react-doctor": "^0.9.1",
     "syncpack": "^13.0.4",
-    "turbo": "^2.7.3"
+    "turbo": "^2.9.14"
   },
   "packageManager": "pnpm@10.28.0",
   "engines": {
-    "node": ">=22.12.0",
+    "node": ">=22.12.0 <23",
     "pnpm": ">=9.0.0"
   },
   "pnpm": {
     "overrides": {
       "zod": "^4.1.13",
-      "axios": "^1.13.5"
+      "axios": "^1.18.0",
+      "shell-quote": ">=1.8.4",
+      "ws@^8": "^8.21.0",
+      "ws@^7": "^7.5.11",
+      "ponder>@hono/node-server": "^1.19.13"
     }
   }
 }

@@ -89,6 +89,14 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
   // Sync registeree with connected wallet for ALL registration types before form submission
   // Once showSignature is true, the registeree is locked
+  //
+  // This is external-store synchronisation, not a stand-in for an event handler:
+  // `address` changes inside the wallet extension, so there is no event in this
+  // component to hang the update on. It cannot collapse into `useOnValueChange`
+  // either, because it must also re-run when `showSignature` returns to false
+  // (the user backing out of signing after switching accounts) — keying on
+  // `address` alone would leave a stale registeree in that path.
+  // react-doctor-disable-next-line react-doctor/no-event-handler
   useEffect(() => {
     if (!showSignature && address) {
       const previousRegisteree = getValues('registeree');
@@ -218,12 +226,12 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     // Refetch hash struct to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
-    // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData =
-      refetchResult?.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2
-        ? (refetchResult.data as [bigint, Hex])
-        : undefined;
-    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+    // Refetch returns the raw contract value: a bare uint256 deadline. (It used to be a
+    // [deadline, hashStruct] tuple; the hash struct was removed because the registration
+    // typehash commits to a windowBlockHash this call cannot know.) Reading it as a tuple
+    // would silently yield undefined and fall back to the cached, staler deadline.
+    const freshDeadline =
+      typeof refetchResult?.data === 'bigint' ? refetchResult.data : hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');
@@ -274,6 +282,9 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         chainId,
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
+        // Bind the cached signature to the forwarder it was signed over, so editing the gas
+        // wallet afterwards invalidates it here instead of on-chain.
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
       });

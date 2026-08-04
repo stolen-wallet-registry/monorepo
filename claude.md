@@ -78,13 +78,19 @@ pnpm format           # Prettier
 
 ### ABI Regeneration (MANDATORY)
 
-After ANY Solidity contract change, regenerate the TypeScript ABI exports:
+After ANY Solidity contract change, regenerate the TypeScript ABI exports **from the repo root**:
 
 ```bash
-cd packages/contracts && forge build && pnpm export-abi
+pnpm export-abi
 ```
 
-This runs `scripts/export-abi.js` which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+This runs `@swr/contracts#export-abi` through turbo (which builds the contracts first via its `dependsOn`, so no separate `forge build` is needed) and then `prettier --write "packages/abis/src/*.ts"`.
+
+**Run it from the root, not `cd packages/contracts && pnpm export-abi`.** The package-level script emits raw `JSON.stringify` output while the committed ABIs are Prettier-formatted, so running it directly leaves the whole of `packages/abis/src` dirty with a formatting-only diff and fails the `Prettier check` step in CI's `node` job. The root script chains the formatter for you.
+
+Under the hood this is `scripts/export-abi.js`, which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+
+Two CI jobs guard this (both manual — see `.github/workflows/ci.yml`): `abi-drift` regenerates with Foundry and fails on any diff, and `abi-freshness` fails if `packages/contracts/src/**.sol` changed without `packages/abis/src` changing alongside it.
 
 ---
 
@@ -352,6 +358,28 @@ The invariant is documented in 4+ places to prevent regression:
 CAIP-10 is specifically for account identifiers (addresses), not transaction hashes.
 We call our transaction format "chain-qualified references" to avoid confusion.
 
+### Sample Addresses Must Be Valid EIP-55 Checksums
+
+Any address literal used as a fixture, story arg, doc example, or test constant **must be a
+correctly checksummed EIP-55 address**. viem's `isAddress()` rejects a mis-cased address under
+its default strict mode, so a bad sample only "works" while the consuming code passes
+`{ strict: false }` — and it gets copy-pasted into new files as if it were a good example.
+
+Generate one before pasting it anywhere:
+
+```bash
+cast to-check-sum-address 0x742d35cc6634c0532925a3b844bc9e7595f0beb0
+# 0x742D35CC6634c0532925A3b844BC9E7595F0BEb0
+```
+
+The canonical sample wallet for this repo is `0x742D35CC6634c0532925A3b844BC9E7595F0BEb0`.
+
+Two intentional exceptions exist and should not be "fixed":
+
+- All-lowercase addresses, which viem accepts and the indexer stores (e.g.
+  `apps/web/src/lib/signatures/storage.test.ts`).
+- Deliberately malformed addresses in negative tests (e.g. `apps/web/src/lib/address.test.ts`).
+
 ---
 
 ## Type Conventions
@@ -416,6 +444,23 @@ import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 
 <EnsExplorerLink value={address} />
 ```
+
+#### EXCEPTION: verification surfaces pass `resolveEns={false}` (security — do not "fix")
+
+"ENS everywhere" stops at any surface where the user is being asked to **verify an address
+before making a trust decision**. These deliberately render raw hex:
+
+| Component                | Why                                                         |
+| ------------------------ | ----------------------------------------------------------- |
+| `SignatureDetails`       | User confirms what they are about to sign                   |
+| `WalletSwitchPrompt`     | User confirms which wallet to switch to                     |
+| `RelayedSignatureReview` | Relayer compares recovered signer against the paired wallet |
+| `ConnectedWalletStatus`  | User confirms which wallet is connected                     |
+
+This is audit finding **V26**: an all-ASCII ENS name can impersonate a hex address, so showing
+a name in place of the address hands an attacker control of the very string the user is
+checking. A name is a claim; the hex is the fact. Adding `EnsExplorerLink` to any of these
+re-opens V26 — if a new verification surface is added, it should pass `resolveEns={false}` too.
 
 ### ENS Utilities
 

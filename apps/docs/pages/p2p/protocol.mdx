@@ -6,7 +6,7 @@ SWR defines custom protocols on top of libp2p for relaying EIP-712 signatures be
 
 ## Custom Protocols
 
-All protocols follow the naming convention `/swr/{action}/{type}/{version}[/received]`.
+Most protocols follow the naming convention `/swr/{action}/{type}/{version}[/received]`. The two recovery protocols are the exception: they carry no `{type}` segment, because they are shared by both flows and deliberately flow-agnostic.
 
 ### Wallet Registration
 
@@ -31,6 +31,15 @@ All protocols follow the naming convention `/swr/{action}/{type}/{version}[/rece
 | `/swr/tx-register/signature/1.0.0/received`        | `TX_REG_REC` | Relayer --> Reporter | Confirm tx registration signature received                                |
 | `/swr/tx-register/payment/1.0.0`                   | `TX_REG_PAY` | Relayer --> Reporter | Send tx `registerBatch()` transaction hash - transaction batch registered |
 
+### Recovery (shared by both flows)
+
+| Protocol                    | Constant     | Direction                       | Purpose                                              |
+| --------------------------- | ------------ | ------------------------------- | ---------------------------------------------------- |
+| `/swr/resign-request/1.0.0` | `RESIGN_REQ` | Relayer --> Registeree/Reporter | Ask the partner to sign again after a dead signature |
+| `/swr/resign-ack/1.0.0`     | `RESIGN_ACK` | Registeree/Reporter --> Relayer | Answer that request - accepted or refused            |
+
+`RESIGN_REQ` is sent when a relayed signature is invalidated by an on-chain revert. The relayer holds a copy it can delete but cannot replace - only the party being helped can sign again - so the request has to travel back over the wire. It is the **only message that moves a flow backwards**, and it is admitted at exactly two steps (see [Re-signing](#re-signing)).
+
 Defined in `packages/p2p/src/protocols.ts`.
 
 ## Complete Message Flow
@@ -44,35 +53,84 @@ sequenceDiagram
     participant C as Contract<br/>(on-chain)
 
     Note over R,L: Connection Phase
-    R->>L: CONNECT (peer ID, wallet address)
-    L->>R: CONNECT (peer ID, wallet address)
-    Note over R,L: Both peers know each other's<br/>wallet address and peer ID
+    Note over L: Relayer pasted the pairing code:<br/>it already knows peer ID + wallet
+    L->>R: CONNECT (relayer wallet address)
+    R->>L: CONNECT (registeree wallet address)
+    Note over R,L: Relayer pinned its partner before dialing —<br/>registeree pins the peer that connected
 
     Note over R,L: Acknowledgement Phase
     R->>R: Sign ACK (EIP-712 in wallet)
-    R->>L: ACK_SIG (signature + chain data)
+    R->>L: ACK_SIG (signature)
     L->>R: ACK_REC (confirmation)
+    Note over R: Advances only if it actually sent an ACK
     L->>C: acknowledge(registeree, trustedForwarder, ...)
     C-->>L: tx confirmed
-    L->>R: ACK_PAY (tx hash)
+    L->>R: ACK_PAY (tx hash + txChainId)
 
     Note over R,L: Grace Period (1-4 min)
     R-->>R: Waiting...
     L-->>L: Waiting...
 
     Note over R,L: Registration Phase
-    R->>R: Sign REG (EIP-712 in wallet)
-    R->>L: REG_SIG (signature + chain data)
+    R->>R: Sign REG (EIP-712 + windowBlock commitment)
+    R->>L: REG_SIG (signature)
     L->>R: REG_REC (confirmation)
     L->>C: register(registeree, trustedForwarder, ...)
     C-->>L: tx confirmed
-    L->>R: REG_PAY (tx hash)
+    L->>R: REG_PAY (tx hash + txChainId)
 
     Note over R,L: Wallet registered as stolen
 
 `} />
 
+The relayer dials, because it is the side that already knows who it agreed to talk to - it pinned both the peer ID and the wallet from the pairing code before it spoke. See [Pairing](/p2p#pairing).
+
 Each protocol opens a new libp2p stream on the existing connection. Streams are length-prefixed, JSON-encoded, and closed after the message is sent.
+
+### Receipts Gate the Sign Steps
+
+`ACK_REC` and `REG_REC` carry no payload, so they cannot be trusted to mean anything on their own. Two separate checks govern them:
+
+1. **Ordering** - a protocol may only act from the step at which it legitimately arrives. Without this, five repeated `ACK_REC` streams walked a victim from `acknowledge-and-sign` all the way to `success`: a fraud victim looking at a success screen for a registration that never happened.
+2. **Provenance of our own side** - the flow advances on a receipt only if this side actually produced _and sent_ the matching signature. The receipt is legitimate at that step; it is just not legitimate before the victim signed. Keyed on the signature existing, so a wallet prompt the user dismissed does not unlock it.
+
+Connection binding is not sufficient for either. It establishes that a message came from the bound partner; it says nothing about whether the message makes sense right now. Ordering and authenticity are separate properties, so they get separate checks.
+
+## Re-signing
+
+When a relayed signature is invalidated by an on-chain revert, the relayer cannot replace it - only the party being helped can sign again.
+
+<Mermaid chart={`
+sequenceDiagram
+    participant R as Registeree<br/>(victim's browser)
+    participant L as Relayer<br/>(helper's browser)
+
+    Note over L: Submission reverted - the held<br/>signature can never succeed
+    L->>R: RESIGN_REQ (reason)
+    Note over R: Checks its own step machine<br/>and its re-sign budget
+    R->>L: RESIGN_ACK (success: accepted or refused)
+    Note over L: Moves only once the answer arrives
+    R->>R: Sign again (EIP-712 in wallet)
+    R->>L: ACK_SIG / REG_SIG
+
+`} />
+
+**Why the reply exists.** A stream write that a peer silently drops still resolves, so `RESIGN_REQ` returning successfully proved only that the bytes left. The receiver has explicit refusal paths, and without an answer both sides waited forever: the relayer on a signature nobody was going to send, the receiver on a request it had already dropped. So the receiver answers every request, refusals included, and the relayer waits up to 30 seconds for that answer. A timeout is reported as unknown, never as refused - the request may still have landed.
+
+**`reason` is a closed enum**, not free text, because the receiver picks a recovery path from it and an open string would let a peer steer that choice:
+
+| Reason                  | Recovery                                                                   |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `signature-invalidated` | Return to the sign step for the phase in flight                            |
+| `window-closed`         | Return to the **acknowledgement** sign step, restarting the two-phase flow |
+
+`window-closed` is strictly the more expensive of the two, so a peer gains nothing by claiming it. At `registration-payment` it is the one cross-phase move, and it is deliberate: the acknowledgement's nonce is spent and its window shut, so no registration signature can ever succeed and staying in phase two deadlocks. It moves backwards to the start, re-imposing every control - fresh acknowledgement signature, fresh on-chain randomized grace period, fresh registration signature - rather than skipping any.
+
+**`MAX_RESIGN_REQUESTS = 3`.** Each honoured request costs the victim a wallet signing prompt, and the sender is the only party who decides when to send one. Without a ceiling a bound partner - the relayer is by construction _not_ trusted with anything but gas - could hold a victim in an unbounded sign-again loop. That is signature fatigue as a service: exactly the conditioning the two-phase flow exists to prevent. Three, because genuine repeats happen (a second stale nonce, then a window that closes during the retry) and nothing legitimate needs a fourth. The counter spans both phases and is never reset by a successful re-sign, so the budget cannot be recharged by letting one recovery complete.
+
+`RESIGN_REQ` is accepted only at `acknowledgement-payment` and `registration-payment` - the windows where the victim is waiting while the relayer spends gas, which is the only time the relayer can discover the signature is dead. It is refused everywhere else, including during the grace period: admitting it there would hand a peer the ability to pull a victim out of the anti-phishing delay.
+
+The peer's `message` string is **never rendered** to the victim. It is prose for logs only; each side generates its own copy of the notice from the validated `reason`, because peer-supplied text displayed to a fraud victim mid-flow is attacker-controlled copy.
 
 ## Message Format
 
@@ -83,6 +141,11 @@ interface ParsedStreamData {
   // Status
   success?: boolean;
   message?: string;
+
+  // Machine-readable re-sign reason (RESIGN_REQ only).
+  // Declared on the envelope because it is validated first and is .strict() —
+  // an unlisted key is rejected before the per-protocol schema is consulted.
+  reason?: 'signature-invalidated' | 'window-closed';
 
   // Peer info (used in CONNECT handshake)
   p2p?: {
@@ -97,16 +160,24 @@ interface ParsedStreamData {
     relayer?: Address;
   };
 
+  // Flow position (carried on the envelope; not acted on by receivers)
+  state?: {
+    currentStep?: string;
+    currentMethod?: string;
+  };
+
   // EIP-712 signature (used in ACK_SIG, REG_SIG, TX_ACK_SIG, TX_REG_SIG)
   signature?: {
     keyRef: string; // Storage key reference
     chainId: number; // Chain ID where signature was created
     address: Address; // Signer's address
-    value: Hex; // The actual signature bytes
+    value: Hex; // The actual signature bytes (0x + 130 hex chars)
     deadline: string; // Signature deadline (BigInt as string)
     nonce: string; // Sequential nonce (BigInt as string)
-    reportedChainId?: string; // CAIP-2 chain hash (bytes32)
+    reportedChainId?: string; // DECIMAL chain ID — NOT bytes32. See below.
     incidentTimestamp?: string; // When theft occurred (BigInt as string)
+    windowBlock?: string; // Registration only: committed block number
+    windowBlockHash?: Hash; // Registration only: blockhash(windowBlock)
   };
 
   // Transaction batch data (used in TX_ACK_SIG and TX_REG_SIG)
@@ -127,19 +198,43 @@ interface ParsedStreamData {
 }
 ```
 
+### `reportedChainId` Is Two Different Things
+
+The name appears in both the signature envelope and the transaction batch, and they are **not the same type**:
+
+| Location                           | Type                       | Why                                                                  |
+| ---------------------------------- | -------------------------- | -------------------------------------------------------------------- |
+| `signature.reportedChainId`        | Decimal chain ID as string | The wallet contracts take `uint64 reportedChainId`                   |
+| `transactionBatch.reportedChainId` | bytes32 (CAIP-2 hash)      | Only the transaction flow hashes it into a chain-qualified reference |
+
+From `packages/p2p/src/types.ts`, on the signature field:
+
+> DECIMAL chain ID where the incident occurred — NOT a bytes32 hash, despite sharing a name with `TransactionBatchOverTheWireSchema.reportedChainId`. [...] The previous comment here claimed bytes32, and validating it as bytes32 would reject every relayed wallet signature.
+
+### `windowBlock` and `windowBlockHash` Travel Together
+
+Registration signatures carry an anti-phishing freshness commitment: the signature covers `blockhash(windowBlock)`, not the block number. The relayer submits `windowBlock` verbatim as calldata and the contract recomputes the hash from it to check against what was signed. The relayer cannot re-derive either value - the chain has moved on by the time it looks.
+
+The schema enforces **co-presence**: both fields present, or both absent. Half a pair is a transaction that can only revert, after the gas is spent. Acknowledgement signatures carry neither, which is why both are optional on the wire.
+
 ### Protocol-Specific Message Schemas
 
 The `@swr/p2p` package exports **Zod schemas** for each protocol category, with TypeScript types derived via `z.infer<>`. These provide compile-time type safety on the send side and optional runtime validation on the receive side.
 
-| Schema / Type                  | Protocols                  | Required fields                     |
-| ------------------------------ | -------------------------- | ----------------------------------- |
-| `HandshakeMessageSchema`       | `CONNECT`                  | `p2p?`, `form?`                     |
-| `WalletSignatureMessageSchema` | `ACK_SIG`, `REG_SIG`       | `signature`                         |
-| `TxSignatureMessageSchema`     | `TX_ACK_SIG`, `TX_REG_SIG` | `signature`, `transactionBatch`     |
-| `ConfirmationMessageSchema`    | `*_REC`                    | `success?`, `message?`              |
-| `PaymentMessageSchema`         | `*_PAY`                    | `hash?`, `messageId?`, `txChainId?` |
+| Schema / Type                  | Protocols                  | Fields                                                      |
+| ------------------------------ | -------------------------- | ----------------------------------------------------------- |
+| `HandshakeMessageSchema`       | `CONNECT`                  | `p2p?`, `form?`, `success?`, `message?`                     |
+| `WalletSignatureMessageSchema` | `ACK_SIG`, `REG_SIG`       | `signature` (required), `form?`                             |
+| `TxSignatureMessageSchema`     | `TX_ACK_SIG`, `TX_REG_SIG` | `signature`, `transactionBatch` (both required)             |
+| `ConfirmationMessageSchema`    | `*_REC`, `RESIGN_ACK`      | `success?`, `message?`                                      |
+| `PaymentMessageSchema`         | `*_PAY`                    | `hash?`, `success?`, `message?`, `messageId?`, `txChainId?` |
+| `ResignRequestMessageSchema`   | `RESIGN_REQ`               | `reason` (**required**), `success?`, `message?`             |
 
-The `StreamMessage` union type (`HandshakeMessage | WalletSignatureMessage | TxSignatureMessage | ConfirmationMessage | PaymentMessage`) is enforced at all send sites via `passStreamData`.
+`reason` is the one required field on a re-sign request. It is the only field the receiver acts on, and the recovery it selects moves the partner's flow backwards - so making it mandatory means a request arriving without a recognised reason fails the per-protocol check and is dropped, rather than falling through to a guessed default.
+
+`RESIGN_ACK` deliberately reuses the plain confirmation shape: `success` carries the whole decision, and it carries nothing else the relayer acts on.
+
+The `StreamMessage` union type (`HandshakeMessage | WalletSignatureMessage | TxSignatureMessage | ConfirmationMessage | PaymentMessage | ResignRequestMessage`) is enforced at all send sites via `passStreamData`.
 
 The `PROTOCOL_SCHEMAS` mapping connects each protocol string to its Zod schema for receive-side validation:
 
@@ -176,15 +271,21 @@ if (isPaymentMessage(data)) {
 
 #### Wallet Registration
 
-| Protocol  | Key fields populated                                                    |
-| --------- | ----------------------------------------------------------------------- |
-| `CONNECT` | `p2p`, `form`                                                           |
-| `ACK_SIG` | `signature`, `form`                                                     |
-| `ACK_REC` | `success`, `message`                                                    |
-| `ACK_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
-| `REG_SIG` | `signature`, `form`                                                     |
-| `REG_REC` | `success`, `message`                                                    |
-| `REG_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
+| Protocol     | Key fields populated                                      |
+| ------------ | --------------------------------------------------------- |
+| `CONNECT`    | `form` (own wallet), `p2p` on the dialing side, `success` |
+| `ACK_SIG`    | `signature` only                                          |
+| `ACK_REC`    | `success`, `message`                                      |
+| `ACK_PAY`    | `hash`, `txChainId`                                       |
+| `REG_SIG`    | `signature` only (includes the `windowBlock` pair)        |
+| `REG_REC`    | `success`, `message`                                      |
+| `REG_PAY`    | `hash`, `txChainId` (plus `messageId` when cross-chain)   |
+| `RESIGN_REQ` | `reason`, `success: false`, `message` (logs only)         |
+| `RESIGN_ACK` | `success`, `message` (logs only)                          |
+
+The `*_SIG` messages carry the signature envelope and nothing else - the counterparty wallet is never taken from them. The relayer already holds the address from the pairing code and compares against it; adopting an address from the payload is the authorization gap the pairing code closes.
+
+`txChainId` is always sent on the wallet payment protocols, not only for cross-chain, so the receiving side builds explorer links against the right chain.
 
 #### Transaction Registration
 
@@ -219,22 +320,37 @@ This prevents prototype pollution attacks where a malicious peer injects keys th
 
 The parsed JSON is validated against `ParsedStreamDataSchema`, which uses `.strict()` mode - any unknown keys cause rejection. Individual fields have type constraints:
 
-| Field              | Constraint                    |
-| ------------------ | ----------------------------- |
-| Ethereum addresses | `0x` + 40 hex chars           |
-| Transaction hashes | `0x` + 64 hex chars           |
-| Signatures         | Max 500 chars                 |
-| Deadlines/nonces   | Max 50 chars (BigInt strings) |
-| Messages           | Max 1000 chars                |
-| Peer IDs           | Max 100 chars                 |
+| Field                        | Constraint                                          |
+| ---------------------------- | --------------------------------------------------- |
+| Ethereum addresses           | `0x` + 40 hex chars                                 |
+| Transaction hashes           | `0x` + 64 hex chars                                 |
+| bytes32 (hashes, chain refs) | `0x` + 64 hex chars                                 |
+| Signatures                   | Exactly `0x` + 130 hex chars (65-byte ECDSA)        |
+| Deadlines/nonces             | Plain decimal integer, up to uint256                |
+| Batch size                   | 1-100 entries, arrays must match `transactionCount` |
+| Messages                     | Max 1000 chars                                      |
+| Peer IDs                     | Max 100 chars                                       |
+
+**These are exact shapes, not length caps, and that distinction is the fix for a real bug.** The signature field used to be `max(500)` and the numeric fields `max(50)`, which meant `"hello"` parsed as a valid signature and `"abc"` as a valid nonce - so `BigInt("abc")` threw inside the relayer's submit path, after the payload had already been accepted as well-formed, and a relayer that accepted the first paid gas for a transaction that could only revert.
+
+The schema is the wire contract every consumer of `@swr/p2p` inherits. The relayer - the one consumer that spends money on the result - re-checks the same shapes plus what the schema cannot know from one message in isolation: which chain it is about to submit on, and whether the batch arrays recompute to the `dataHash` the signature actually committed to. That last check is the one the contract also performs, and it turns a paid-for revert into a rejected message.
 
 If any validation layer fails, the message is discarded and a `StreamDataValidationError` is thrown.
+
+### 4. Peer Binding and Ordering
+
+Two further gates run before a handler acts on a message:
+
+- **Peer binding** - the partner is pinned once, from the connection, never from the payload, and every later stream must come from that same peer. Peer IDs are displayed in the UI and pass through a public relay, so anyone who learned one could otherwise dial in and inject signatures or drive the victim's step machine.
+- **Per-protocol schema** - the envelope schema is the union of everything any protocol may send, so it would accept a payment notification carrying a signature field. `PROTOCOL_SCHEMAS` narrows to what the specific protocol is allowed to contain.
+
+Both fail closed: an unknown protocol has no schema and is rejected, and a stream with no connection is rejected rather than treated as unattributable-but-fine. Liveness is recorded only _past_ these gates - a well-formed message from a stranger proves nothing about the partner, and recording it earlier let anyone on the public relay paper over a keep-alive failure that had correctly reported the partner lost.
 
 ## Connection Resilience
 
 ### Keep-Alive
 
-Circuit relay reservations expire after ~2 minutes of inactivity. The grace period between acknowledgement and registration can last 1-4 minutes. Without keep-alive, the connection drops mid-flow.
+Circuit relay v2 caps each relayed connection independently of the reservation, and pings do not reset those caps - the libp2p defaults are 2 minutes and 128 KiB, either of which tears the connection down. Two minutes is shorter than the 1-4 minute randomized grace period, so a registration that waited out a long grace period would lose its relayed connection right before the registration signature needed to be sent. The relay raises both (duration tracks the 20-minute reservation TTL, data to 1 MiB), and the client keeps the reservation itself alive.
 
 The `useP2PKeepAlive` hook sends libp2p pings every **45 seconds** to keep the relay reservation alive. Three consecutive ping failures mark the connection as unhealthy.
 
@@ -242,12 +358,14 @@ The `useP2PKeepAlive` hook sends libp2p pings every **45 seconds** to keep the r
 
 If a send fails (network glitch, temporary disconnection), messages are queued in-memory for retry:
 
-| Parameter               | Value                                                |
-| ----------------------- | ---------------------------------------------------- |
-| Max queued messages     | 10                                                   |
-| Message expiry          | 5 minutes                                            |
-| Max retries per message | 3                                                    |
-| Retry strategy          | Reconnect on first failure, then exponential backoff |
+| Parameter               | Value                                                            |
+| ----------------------- | ---------------------------------------------------------------- |
+| Max queued messages     | 10 (oldest dropped when full)                                    |
+| Message expiry          | 5 minutes                                                        |
+| Max retries per message | 3, then dropped and reported                                     |
+| Send order              | Strictly sequential - queued messages are ordered protocol steps |
+
+The queue is flushed after reconnecting, over a single connection, one message at a time. It is never parallelized: queued messages are protocol steps that must reach the peer in order (an acknowledgement signature before its payment notification), so firing them concurrently would reorder the handshake.
 
 The queue is **in-memory only** - no sensitive signature data is persisted to `localStorage` or disk. If the browser tab closes, queued messages are lost.
 
@@ -267,27 +385,45 @@ The relay server (`apps/relay/`) is a minimal libp2p node that exists solely for
 
 ### Configuration
 
-| Parameter          | Value                                           |
-| ------------------ | ----------------------------------------------- |
-| Transport          | WebSocket on TCP port 12312                     |
-| Encryption         | Noise protocol (ChaCha20-Poly1305)              |
-| Stream multiplexer | Yamux                                           |
-| Max connections    | 100                                             |
-| Max reservations   | 15                                              |
-| Reservation TTL    | 30 minutes                                      |
-| Hop timeout        | 60 seconds                                      |
-| Peer ID            | Persistent Ed25519 key (stable across restarts) |
+| Parameter                 | Value                                           | Env override                  |
+| ------------------------- | ----------------------------------------------- | ----------------------------- |
+| Transport                 | WebSocket on TCP port 12312                     | `RELAY_PORT`                  |
+| Encryption                | Noise protocol (ChaCha20-Poly1305)              | -                             |
+| Stream multiplexer        | Yamux                                           | -                             |
+| Max connections           | 600                                             | `RELAY_MAX_CONNECTIONS`       |
+| Max reservations          | 512                                             | `RELAY_MAX_RESERVATIONS`      |
+| Reservations per host     | 8                                               | `RELAY_RESERVATIONS_PER_HOST` |
+| Reservation TTL           | 20 minutes                                      | `RELAY_RESERVATION_TTL_MS`    |
+| Hop timeout               | 60 seconds                                      | -                             |
+| Inbound connection rate   | 5/sec per host                                  | -                             |
+| Relayed connection limits | 1 MiB data, duration tracks the reservation TTL | -                             |
+| Peer ID                   | Persistent Ed25519 key (stable across restarts) | -                             |
+
+### Reservation Limits Are a DoS Control
+
+The relay is the only path to registration for a victim whose wallet is drained: with no funds, standard and self-relay registration are both unavailable to them. Taking the relay down does not degrade the product, it removes the single option those users have.
+
+The libp2p defaults made that trivial. `maxReservations: 15` with a 30-minute TTL and no per-source cap meant one host could hold every slot for half an hour, indefinitely, with 15 cheap WebSocket connections. The current numbers are chosen against that:
+
+- **512 global** costs little - a reservation is a map entry plus an idle WebSocket - and combined with the per-host cap it takes 64 distinct source addresses to fill instead of one.
+- **8 per host** leaves room for a shared NAT, a household running several flows, and reconnect churn where a stale reservation has not yet expired. A flow needs two (registeree + relayer), normally on different hosts.
+- **20 minute TTL** still outlives one registration - a 1-4 minute randomized grace period plus the registration window, ~15 minutes worst case - while releasing an abandoned or hostile slot 10 minutes sooner than the default. Live peers re-up automatically 5 minutes before expiry.
+- **600 connections** keeps headroom over the reservation ceiling. Every reservation is backed by a live connection, so a lower connection cap would silently cap reservations regardless of `maxReservations`.
+
+circuit-relay-v2 offers no per-peer or per-IP reservation option, so the per-host cap is enforced through the connection gater, which the server consults immediately before granting a reservation. IPv6 sources are grouped by /64 (one ordinary allocation counts as one host); IPv4-mapped addresses resolve back to the embedded IPv4 rather than collapsing into a single bucket. An unattributable source fails **open** - denying there would let one odd transport take the relay offline for everyone.
+
+The resolved limits are validated against each other at startup and printed to the log, so a deployment that sets one variable without the others is told which ceiling is actually in force instead of discovering it under load.
 
 ### Key Management
 
-In development, Ed25519 keys are auto-generated and saved to `apps/relay/keys.json`. In production, keys are loaded from the `RELAY_PRIVATE_KEY` environment variable (base64-encoded protobuf). The relay fails fast in production if no keys are configured.
+`RELAY_PRIVATE_KEY` (base64-encoded Ed25519 protobuf) is checked first in any environment and is the preferred production mechanism. Otherwise the relay reads `apps/relay/keys.json`, which it will auto-generate in development if missing or invalid. In production it never auto-regenerates: a missing, corrupt, or wrong-format key file is a hard failure requiring manual intervention.
 
 ### What the Relay Does NOT Do
 
 - Does not register protocol handlers for `/swr/*` protocols
 - Does not inspect message content
 - Does not store any data beyond peer connection metadata
-- Does not require authentication - any libp2p peer can reserve a slot
+- Does not authenticate peers - but it does **rate-limit** them: reservations are capped globally and per source host, and denials are logged
 
 ## Security Considerations
 
@@ -295,7 +431,10 @@ In development, Ed25519 keys are auto-generated and saved to `apps/relay/keys.js
 
 **Signature safety** - EIP-712 signatures include the `trustedForwarder` address. Even if intercepted, a signature is only usable by the designated forwarder. It cannot be replayed by a different address.
 
-**No persistence of sensitive data** - The message queue lives in memory. Peer ID keypairs are stored in `localStorage` keyed by connected wallet address (Ed25519 private key for identity, not wallet keys). Same wallet + same browser = same Peer ID across sessions, enabling reconnection if the flow is interrupted. No signatures or transaction data are written to storage.
+**Storage is tab-scoped, and nothing sensitive outlives the tab** - The message queue lives in memory only and is lost if the tab closes. Two things do get written, both to `sessionStorage`:
+
+- **The Peer ID keypair** (Ed25519 identity key, not wallet keys), under a single constant key. Deliberately **not** keyed by wallet address: one key per address meant the storage keys alone enumerated every wallet ever connected in that browser. Deliberately **not** `localStorage`: a key that survives forever still produces your Peer ID months later, and a Peer ID is what your partner's binding check authenticates - so an attacker holding it can connect first, get pinned, and lock the real peer out of a registration they may have no other way to complete. Session scope is the compromise the flow needs: stable across a reload (the partner has pinned you), gone when the tab closes. Keys written by older builds under `swr-p2p-keypair-<address>` in `localStorage` are purged automatically.
+- **Received signatures**, which the relayer must persist because signing and submitting happen in different components. Keyed `swr_sig_{address}_{chainId}_{step}`, with a 30-minute TTL, cleared when the tab closes. Nothing is written to `localStorage` or to disk.
 
 **Production connection gating** - In production builds, the libp2p connection gater blocks dials to private/localhost IP ranges (RFC 1918, RFC 3927, RFC 4193, link-local). This prevents SSRF-style attacks where a malicious peer advertises a private network address.
 
@@ -320,11 +459,12 @@ StreamMessage (typed per protocol)
   → TextEncoder (UTF-8 bytes)
   → lp.encode.single (varint + bytes)
   → stream.sink ──── network ────→ stream.source
-                                     → accumulate chunks (size check ≤ 100KB)
                                      → lp.decode (strip varint, yield message)
+                                     → accumulate chunks (size check ≤ 100KB)
                                      → TextDecoder (bytes → string)
                                      → safeJsonParse (strip dangerous keys)
                                      → Zod .strict() validate
+                                     → peer binding + per-protocol schema
                                      → typed ParsedStreamData
 ```
 
@@ -336,29 +476,44 @@ What actually goes over the wire for each protocol category:
 
 **Handshake** (`CONNECT`) — ~120 bytes
 
+The relayer dials first, naming its own wallet; the registeree replies with its own. Each side sends only its own address - the other is a claim to compare, never one to adopt.
+
 ```json
+// Relayer → Registeree (the dial)
 {
-  "form": { "registeree": "0x742d...5f0bEb" },
+  "form": { "relayer": "0x9fE4...A21c" },
   "p2p": { "partnerPeerId": "12D3KooW...abc" }
+}
+
+// Registeree → Relayer (the reply)
+{
+  "form": { "registeree": "0x742D35CC6634c0532925A3b844BC9E7595F0BEb0" },
+  "success": true
 }
 ```
 
-**Wallet Signature** (`ACK_SIG`, `REG_SIG`) — ~350 bytes
+**Wallet Signature** (`ACK_SIG`, `REG_SIG`) — ~350-450 bytes
+
+`keyRef` is `AcknowledgementOfRegistry` for phase one and `Registration` for phase two. The `windowBlock` pair appears on registration signatures only.
 
 ```json
 {
   "signature": {
-    "keyRef": "AcknowledgementOfRegistry",
+    "keyRef": "Registration",
     "chainId": 8453,
-    "address": "0x742d...5f0bEb",
-    "value": "0x1a2b3c...64hex...chars",
+    "address": "0x742D35CC6634c0532925A3b844BC9E7595F0BEb0",
+    "value": "0x1a2b3c...130hex...chars",
     "deadline": "1708099200",
-    "nonce": "0",
-    "reportedChainId": "0xabcd...bytes32",
-    "incidentTimestamp": "1707500000"
+    "nonce": "1",
+    "reportedChainId": "8453",
+    "incidentTimestamp": "1707500000",
+    "windowBlock": "19283746",
+    "windowBlockHash": "0xabcd...bytes32"
   }
 }
 ```
+
+Note `reportedChainId` here is the decimal chain ID `"8453"`, not a bytes32 hash - see [above](#reportedchainid-is-two-different-things).
 
 **Transaction Signature** (`TX_ACK_SIG`, `TX_REG_SIG`) — ~500-5000 bytes depending on batch size
 
@@ -402,3 +557,26 @@ What actually goes over the wire for each protocol category:
 ```
 
 Cross-chain payments may also include a `messageId` (Hyperlane bridge message hash) for explorer links.
+
+**Re-sign request** (`RESIGN_REQ`) — ~120 bytes
+
+```json
+{
+  "reason": "window-closed",
+  "success": false,
+  "message": "The registration window closed before the transaction confirmed."
+}
+```
+
+The `message` is written to the receiver's log and never to its screen; the receiver renders its own copy from `reason`.
+
+**Re-sign acknowledgement** (`RESIGN_ACK`) — ~60 bytes
+
+```json
+{
+  "success": false,
+  "message": "Re-sign limit reached"
+}
+```
+
+`success: false` here is a refusal, not a delivery failure - the request will never be honoured, and the relayer stops waiting.

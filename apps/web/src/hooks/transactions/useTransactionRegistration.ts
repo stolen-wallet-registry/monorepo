@@ -31,6 +31,11 @@ export interface TxRegistrationParamsHub {
   transactionHashes: Hash[];
   /** CAIP-2 chain IDs for each transaction as bytes32 */
   chainIds: Hash[];
+  /**
+   * Block whose hash the signature committed to. Unsigned calldata — the contract recomputes
+   * `blockhash(windowBlock)` and compares, so this must be the exact block used at signing.
+   */
+  windowBlock: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the registration transaction */
@@ -51,6 +56,11 @@ export interface TxRegistrationParamsSpoke {
   transactionHashes: Hash[];
   /** CAIP-2 chain IDs for each transaction as bytes32 */
   chainIds: Hash[];
+  /**
+   * Block whose hash the signature committed to. Unsigned calldata — the contract recomputes
+   * `blockhash(windowBlock)` and compares, so this must be the exact block used at signing.
+   */
+  windowBlock: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the transaction */
@@ -170,18 +180,24 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
       let txHash: Hash;
 
       if (isHub && !isSpokeParams(params)) {
-        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s) - payable
-        const { feeWei } = params;
+        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, windowBlock,
+        //                           v, r, s) - payable
+        const { feeWei, windowBlock } = params;
 
+        // Pin the transaction to the chain the contract address was resolved for. Without this,
+        // wagmi submits to whatever chain the connector currently sits on, so a mid-flow chain
+        // switch would send the write to the wrong chain against a stale address.
         txHash = await writeContractAsync({
           address: contractAddress,
           abi: transactionRegistryAbi,
+          chainId,
           functionName: 'registerTransactions',
           args: [
             reporter,
             deadline,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,
@@ -189,12 +205,14 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
           value: feeWei ?? 0n,
         });
       } else if (isSpoke && isSpokeParams(params)) {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
-        const { reportedChainId, nonce, feeWei } = params;
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        // transactionHashes, chainIds, windowBlock, v, r, s)
+        const { reportedChainId, nonce, feeWei, windowBlock } = params;
 
         txHash = await writeContractAsync({
           address: contractAddress,
           abi: spokeRegistryAbi,
+          chainId,
           functionName: 'registerTransactionBatch',
           args: [
             reportedChainId,
@@ -203,6 +221,7 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
             reporter,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,

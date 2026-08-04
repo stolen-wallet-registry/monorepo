@@ -74,6 +74,26 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Signature deadline is in the past.',
     action: 'Please generate a new signature.',
   },
+  '0x82cec44b': {
+    name: 'WalletRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
+  },
+  '0xe5784882': {
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    message: 'This signature was created before the waiting period ended.',
+    action: 'Please sign again now that the waiting period is over.',
+  },
+  '0xb9adaf66': {
+    name: 'TimingConfig__WindowBlockNotMined',
+    message: 'This signature references a block that does not exist yet.',
+    action: 'Please sign again.',
+  },
+  '0x86a7f1b3': {
+    name: 'TimingConfig__WindowBlockTooOld',
+    message: 'This signature is too old to submit.',
+    action: 'Please sign again.',
+  },
   '0x3214c145': {
     name: 'WalletRegistry__GracePeriodNotStarted',
     message: 'The grace period has not ended yet.',
@@ -159,6 +179,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Your signature has expired.',
     action: 'Please sign again.',
   },
+  '0xe1a14317': {
+    name: 'TransactionRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
+  },
   '0x98de1e59': {
     name: 'TransactionRegistry__DeadlineInPast',
     message: 'Signature deadline is in the past.',
@@ -209,10 +234,20 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Transaction hashes and chain IDs must have the same length.',
     action: 'Please verify the inputs and try again.',
   },
+  '0xdd53fd88': {
+    name: 'TransactionRegistry__InvalidDataHash',
+    message: 'Batch data hash is empty.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
   '0x97606fef': {
     name: 'TransactionRegistry__DataHashMismatch',
     message: 'Data hash does not match acknowledgement.',
     action: 'Ensure the transaction list matches what was acknowledged.',
+  },
+  '0x849d2272': {
+    name: 'TransactionRegistry__BatchCountMismatch',
+    message: 'The batch size differs from what you signed.',
+    action: 'Stop and re-check the batch.',
   },
   '0xef0b2ab3': {
     name: 'TransactionRegistry__InvalidStep',
@@ -369,11 +404,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Unknown cross-chain message type.',
     action: 'Please contact support.',
   },
-  '0x0634f9a3': {
-    name: 'CrossChainInbox__DuplicateMessage',
-    message: 'This cross-chain message was already processed.',
-    action: 'No action needed — your registration is already complete.',
-  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SpokeRegistry Errors
@@ -398,6 +428,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'SpokeRegistry__SignatureExpired',
     message: 'Your signature has expired.',
     action: 'Please sign again.',
+  },
+  '0x1df452a2': {
+    name: 'SpokeRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
   },
   '0x8a2ee99e': {
     name: 'SpokeRegistry__InvalidNonce',
@@ -466,8 +501,23 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   },
   '0xba8873e4': {
     name: 'SpokeRegistry__InvalidDataHash',
-    message: 'Data hash mismatch.',
-    action: 'Your data may have changed. Please start over.',
+    message: 'Batch data hash is empty.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
+  '0x3d7ee93f': {
+    name: 'SpokeRegistry__DataHashMismatch',
+    message: 'This batch does not match the batch you signed.',
+    action: 'Stop and re-check the batch.',
+  },
+  '0x9e6deac9': {
+    name: 'SpokeRegistry__ChainIdMismatch',
+    message: 'The chain differs from the one you signed for.',
+    action: 'Stop and re-check the batch.',
+  },
+  '0x08cbb2f6': {
+    name: 'SpokeRegistry__BatchCountMismatch',
+    message: 'The batch size differs from what you signed.',
+    action: 'Stop and re-check the batch.',
   },
   '0x9de3b4a9': {
     name: 'SpokeRegistry__DataMismatch',
@@ -483,11 +533,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'CAIP10__InvalidFormat',
     message: 'Invalid CAIP-10 identifier format.',
     action: 'Use namespace:chainId:address (eip155:8453:0x...).',
-  },
-  '0x96c95b05': {
-    name: 'CAIP10__UnsupportedNamespace',
-    message: 'Unsupported chain namespace.',
-    action: 'Currently only eip155 is supported.',
   },
   '0x31d8ad42': {
     name: 'CAIP10Evm__InvalidAddress',
@@ -566,10 +611,10 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Invalid translations registry address.',
     action: 'Please contact support.',
   },
-  '0x2ef38faa': {
-    name: 'NotRegisteredOrPending',
+  '0xaba47339': {
+    name: 'NotRegistered',
     message: 'Wallet is not registered in the Stolen Wallet Registry.',
-    action: 'Only wallets that have been registered as stolen can mint.',
+    action: 'Only wallets that have completed registration can mint.',
   },
   '0xddefae28': {
     name: 'AlreadyMinted',
@@ -653,8 +698,23 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   },
   '0xe5900879': {
     name: 'TimelockOwnable__SetupAlreadyComplete',
-    message: 'Initial setup is complete. Changes require timelock.',
+    message: 'Initial setup has already been completed.',
+    action: 'No action needed - setup only runs once.',
+  },
+  '0xac5551d8': {
+    name: 'TimelockOwnable__UseTimelockedPath',
+    message: 'This change is now timelocked.',
     action: 'Use the propose/activate flow for this change.',
+  },
+  '0xab3bcf81': {
+    name: 'TimelockOwnable__RenounceDisabled',
+    message: 'Ownership cannot be renounced after setup.',
+    action: 'Transfer ownership via the propose/activate flow instead.',
+  },
+  '0x8674ccdc': {
+    name: 'TimelockOwnable__ZeroAddress',
+    message: 'Ownership cannot be transferred to the zero address.',
+    action: 'Provide a valid new owner address.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -676,6 +736,155 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Registration data exceeds bridge limits.',
     action: 'Please contact support.',
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HyperlaneAdapter Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xfc021e00': {
+    name: 'HyperlaneAdapter__UnauthorizedSender',
+    message: 'This contract is not authorized to send cross-chain messages.',
+    action: 'The spoke deployment is misconfigured — please contact support.',
+  },
+  '0x045d5bd1': {
+    name: 'HyperlaneAdapter__GasLimitExceeded',
+    message: 'This batch is too large to execute on the destination chain.',
+    action: 'Please split it into smaller batches and try again.',
+  },
+  '0x829e4d6e': {
+    name: 'HyperlaneAdapter__RefundFailed',
+    message: 'Your excess bridge payment could not be refunded.',
+    action: 'Please try again, sending closer to the quoted fee.',
+  },
+  '0x86c6331f': {
+    name: 'HyperlaneAdapter__ZeroAddress',
+    message: 'A required address was missing.',
+    action: 'Please contact support.',
+  },
+  '0x73c15155': {
+    name: 'HyperlaneAdapter__TooManyDomains',
+    message: 'Too many chains were submitted at once.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SpokeRegistry Errors (added 2026-07-29 — user-reachable, previously unmapped)
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0x4303372f': {
+    name: 'SpokeRegistry__AlreadyAcknowledged',
+    message: 'You already have a registration in progress for this wallet.',
+    action: 'Please finish it, or wait for it to expire before starting again.',
+  },
+  '0x62281563': {
+    name: 'SpokeRegistry__BatchTooLarge',
+    message: 'This batch has too many transactions to register cross-chain.',
+    action: 'Please select fewer transactions and try again.',
+  },
+  '0x67d914a1': {
+    name: 'SpokeRegistry__InvalidIncidentTimestamp',
+    message: 'The incident date cannot be in the future.',
+    action: 'Please choose when the theft actually happened.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WalletRegistry / TransactionRegistry / ContractRegistry (previously unmapped)
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xecc2382d': {
+    name: 'WalletRegistry__InvalidIncidentTimestamp',
+    message: 'The incident date cannot be in the future.',
+    action: 'Please choose when the theft actually happened.',
+  },
+
+  // REMOVED (2026-08-03): eight entries for errors that no longer exist in any ABI —
+  // WalletRegistry__InvalidSigner / __NotAcknowledged, TransactionRegistry__AlreadyRegistered
+  // / __InvalidSigner / __NotAcknowledged, ContractRegistry__AlreadyRegistered,
+  // FraudRegistryHub__UnknownRegistryType, OperatorRegistry__NotAuthorizedForRegistry.
+  // They were dead declarations in the interfaces, never reverted from src/, and were dropped
+  // in the same sweep. A curated message for a selector no contract can emit is unreachable
+  // text that still has to be maintained; the coverage guard fails on them for that reason. If
+  // any of these come back in Solidity, that same guard will demand a message again.
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Soulbound Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xcd2e8e80': {
+    name: 'NotAuthorizedMinter',
+    message: 'This account is not allowed to mint.',
+    action: 'Please contact support.',
+  },
+  '0x237c11a2': {
+    name: 'SpokeSoulboundForwarder__DonationBelowMinimum',
+    message: 'Your donation is below the minimum.',
+    action: 'Please increase the amount and try again.',
+  },
+  '0x3ecec4b1': {
+    name: 'SpokeSoulboundForwarder__InsufficientPayment',
+    message: 'The amount sent does not cover the donation plus the bridge fee.',
+    action: 'Please try again with the quoted total.',
+  },
+  '0xbb226891': {
+    name: 'SpokeSoulboundForwarder__HubNotConfigured',
+    message: 'Cross-chain minting is not configured on this network.',
+    action: 'Please switch to a supported network.',
+  },
+  '0xe1d8051d': {
+    name: 'SpokeSoulboundForwarder__RefundFailed',
+    message: 'Your excess payment could not be refunded.',
+    action: 'Please try again, sending closer to the quoted amount.',
+  },
+  '0x060d4ef1': {
+    name: 'SoulboundReceiver__UntrustedForwarder',
+    message: 'This cross-chain mint came from an untrusted source.',
+    action: 'Please contact support.',
+  },
+  '0x5749f41b': {
+    name: 'SoulboundReceiver__WalletMintFailed',
+    message: 'The token could not be minted on the hub chain.',
+    action: 'Please confirm the wallet is fully registered, then try again.',
+  },
+  '0x776f5444': {
+    name: 'SoulboundReceiver__SupportMintFailed',
+    message: 'The support token could not be minted on the hub chain.',
+    action: 'Please contact support — your donation was received.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OpenZeppelin Errors reachable from user flows
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0x118cdaa7': {
+    name: 'OwnableUnauthorizedAccount',
+    message: 'This action requires the contract owner.',
+    action: 'Please connect the owner account.',
+  },
+  '0xd93c0665': {
+    name: 'EnforcedPause',
+    message: 'This action is paused.',
+    action: 'Please try again later.',
+  },
+  '0xf645eedf': {
+    name: 'ECDSAInvalidSignature',
+    message: 'The signature is not valid.',
+    action: 'Please sign again.',
+  },
+  '0xfce698f7': {
+    name: 'ECDSAInvalidSignatureLength',
+    message: 'The signature is malformed.',
+    action: 'Please sign again.',
+  },
+  '0xd78bce0c': {
+    name: 'ECDSAInvalidSignatureS',
+    message: 'The signature is malformed.',
+    action: 'Please sign again.',
+  },
+  '0x7e273289': {
+    name: 'ERC721NonexistentToken',
+    message: 'That token does not exist.',
+    action: 'Please refresh and try again.',
+  },
+  '0x3ee5aeb5': {
+    name: 'ReentrancyGuardReentrantCall',
+    message: 'This action cannot be re-entered.',
+    action: 'Please try again.',
+  },
 };
 
 /**
@@ -684,4 +893,18 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
  */
 export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = Object.fromEntries(
   Object.entries(CONTRACT_ERROR_SELECTORS).map(([selector, info]) => [selector.toLowerCase(), info])
+);
+
+/**
+ * Map of Solidity error names to user-friendly error info.
+ *
+ * viem decodes reverts against the ABI and reports the error *name*, not the selector,
+ * whenever the error is present in the ABI passed to the call — which is always the case
+ * for our contracts. Name lookup is therefore the primary path; the selector map is the
+ * fallback for reverts whose error is absent from the ABI.
+ *
+ * Derived from `CONTRACT_ERROR_SELECTORS` so there is exactly one source of truth.
+ */
+export const CONTRACT_ERROR_BY_NAME: Record<string, ContractErrorInfo> = Object.fromEntries(
+  Object.values(CONTRACT_ERROR_SELECTORS).map((info) => [info.name, info])
 );

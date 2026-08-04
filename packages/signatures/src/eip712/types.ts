@@ -58,6 +58,12 @@ export const EIP712_TYPES = {
     { name: 'incidentTimestamp', type: 'uint64' },
     { name: 'nonce', type: 'uint256' },
     { name: 'deadline', type: 'uint256' },
+    // Anti-phishing: hash of a block at or after the acknowledgement's grace-period start.
+    // That block has no hash yet when the acknowledgement is signed, so this signature cannot
+    // be produced in the same sitting — which is what makes the two-phase delay real rather
+    // than merely delaying the transaction. Must be the LAST field (matches the Solidity
+    // typehash exactly, or the digest will not verify).
+    { name: 'windowBlockHash', type: 'bytes32' },
   ],
 } as const;
 
@@ -81,6 +87,12 @@ export interface RegistrationMessage {
   incidentTimestamp: bigint;
   nonce: bigint;
   deadline: bigint;
+  /**
+   * Hash of `windowBlock` — a block at or after the acknowledgement's grace-period start.
+   * Pair this with the matching `windowBlock` number when calling `register`; the contract
+   * recomputes `blockhash(windowBlock)` and compares. Only the hash is signed.
+   */
+  windowBlockHash: Hash;
 }
 
 /** Step enum matching contract (1 = ACK, 2 = REG) */
@@ -121,6 +133,8 @@ export const TX_EIP712_TYPES = {
     { name: 'transactionCount', type: 'uint32' },
     { name: 'nonce', type: 'uint256' },
     { name: 'deadline', type: 'uint256' },
+    // Anti-phishing freshness commitment — see the note on WALLET_EIP712_TYPES.Registration.
+    { name: 'windowBlockHash', type: 'bytes32' },
   ],
 } as const;
 
@@ -146,6 +160,8 @@ export interface TxRegistrationMessage {
   transactionCount: number;
   nonce: bigint;
   deadline: bigint;
+  /** Hash of `windowBlock` — see {@link RegistrationMessage.windowBlockHash}. */
+  windowBlockHash: Hash;
 }
 
 /** Step enum for transaction registry (1 = ACK, 2 = REG) */
@@ -176,9 +192,13 @@ export type WalletAcknowledgeArgs = readonly [
 
 /**
  * Wallet Registration contract arguments (unified hub and spoke).
- * register(registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * register(registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce,
+ *          windowBlock, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
+ * @note `windowBlock` is NOT signed — the signed `windowBlockHash` binds it. Pass the same block
+ *       number whose hash was signed; the contract recomputes `blockhash(windowBlock)` and
+ *       compares, so a mismatched number fails verification rather than being trusted.
  */
 export type WalletRegistrationArgs = readonly [
   registeree: Address,
@@ -187,6 +207,7 @@ export type WalletRegistrationArgs = readonly [
   incidentTimestamp: bigint, // Unix timestamp (uint64)
   deadline: bigint, // Signature expiry (uint256)
   nonce: bigint, // Replay protection nonce (uint256)
+  windowBlock: bigint, // Block whose hash the signature commits to (uint256, unsigned)
   v: number, // Signature v (uint8)
   r: Hash, // Signature r (bytes32)
   s: Hash, // Signature s (bytes32)

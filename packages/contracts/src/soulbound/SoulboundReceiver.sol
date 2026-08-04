@@ -2,9 +2,11 @@
 pragma solidity ^0.8.24;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { ISoulboundReceiver } from "../interfaces/ISoulboundReceiver.sol";
+import { BaseSoulbound } from "./BaseSoulbound.sol";
 import { WalletSoulbound } from "./WalletSoulbound.sol";
 import { SupportSoulbound } from "./SupportSoulbound.sol";
 
@@ -13,7 +15,7 @@ import { SupportSoulbound } from "./SupportSoulbound.sol";
 /// @notice Hub chain receiver for cross-chain soulbound mint requests
 /// @dev Implements Hyperlane's IMessageRecipient to receive messages from spoke chains.
 ///      Validates trusted forwarders and executes mints on soulbound contracts.
-contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwnable {
+contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwnable, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -73,7 +75,9 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _message Encoded payload: [msgType, wallet, supporter, donationAmount]
-    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external {
+    /// @dev `payable` because IMessageRecipient.handle is payable from Hyperlane v3. Our dispatches
+    ///      set msgValue to 0, so no value is expected here.
+    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external payable whenNotPaused {
         // Only mailbox can call
         if (msg.sender != mailbox) revert SoulboundReceiver__OnlyMailbox();
 
@@ -104,20 +108,98 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     }
 
     /// @notice Execute wallet soulbound mint
+    /// @dev Failure handling is deliberately split by cause, because "revert" and "consume" are
+    ///      both wrong as blanket policies for a Hyperlane message:
+    ///
+    ///        - Reverting makes `Mailbox.process` revert, so Hyperlane re-delivers the identical
+    ///          body forever and the message is never marked delivered. For a PERMANENT failure
+    ///          that is an undeliverable message and a burnt bridge fee, and it is trivially
+    ///          griefable: `WalletSoulbound.mintTo` is permissionless, so anyone can front-run
+    ///          the bridged request with a direct hub-side mint for ~80k gas and strand it.
+    ///          The same thing happens with zero malice when two spokes request the same wallet.
+    ///        - Returning on every failure would break the one case where the retry is the
+    ///          recovery mechanism: a mint request that arrives BEFORE the wallet's registration
+    ///          message. That is transient, and Hyperlane's retry resolves it by itself.
+    ///
+    ///      So: `NotRegistered` reverts (let the retry fix it); every other cause emits
+    ///      {MintFailed} and returns, consuming the message.
+    ///
+    ///      An EMPTY revert reason also re-reverts. A sub-call out-of-gas surfaces here as an
+    ///      empty reason under the 63/64 rule, and consuming the message on an OOG would discard
+    ///      a mint that a re-delivery with more gas would have completed.
+    ///
+    ///      {MintFailed} is emitted ONLY on the consuming path. Emitting before a revert in the
+    ///      same frame discards the log, so an event on the revert path is unobservable by
+    ///      construction — an earlier version of this function did exactly that.
+    ///
+    ///      The permissionless hub-side `mintTo` remains the manual recovery path for anything
+    ///      consumed here.
+    ///
+    ///      ── WHY `NotRegistered` IS UNCONDITIONALLY RETRIED ──────────────────────────────
+    ///
+    ///      This branch used to be gated on a hub-side `isWalletPending(wallet)` check, on the
+    ///      theory that a live acknowledgement distinguishes "registration in flight" (retry) from
+    ///      "wallet will never register" (consume). That gate was DEAD, and removing it is the
+    ///      fix, not a relaxation:
+    ///
+    ///        Every wallet that reaches this function registered on a SPOKE — `handle` is
+    ///        `onlyMailbox`, so there is no other caller. A spoke registration acknowledges into
+    ///        `SpokeRegistry._pendingAcknowledgements` on the SPOKE chain, and the hub side
+    ///        arrives through `WalletRegistry.registerFromHub`, which writes the entry directly
+    ///        and never creates a hub-side pending row. So hub `isWalletPending` was false for
+    ///        100% of the wallets reaching here, and the gate only ever chose "consume".
+    ///
+    ///      THE CONTRACT CANNOT TELL THE TWO CASES APART, and no reasonable machinery makes it
+    ///      able to. The payload is `(msgType, wallet, supporter, donationAmount)`: no proof of
+    ///      registration, no acknowledgement reference, no timestamp. A request whose registration
+    ///      message is one block behind and a request for a wallet that never registers are
+    ///      byte-identical and leave identical hub state. Having the spoke forwarder attest to a
+    ///      local acknowledgement would not fix it either — a spoke acknowledgement can expire
+    ///      without ever registering, so the attestation is not a promise, and it would put a
+    ///      registry dependency inside a soulbound wire format for no decidable gain.
+    ///
+    ///      So the only real question is which way an UNDECIDABLE case should fail, and the harm
+    ///      is asymmetric:
+    ///        - Consume when it was transient  -> a paid-for mint is silently and permanently
+    ///          lost, recoverable only if a human notices {MintFailed} and sends a second
+    ///          hub-side transaction.
+    ///        - Revert when it was terminal    -> the message stays undelivered. Nothing is lost
+    ///          that was not already lost: the bridge fee is spent either way and consuming
+    ///          refunds nothing. Relayers simulate before submitting, so a permanently-reverting
+    ///          message is skipped rather than repeatedly paid for, and producing one costs the
+    ///          sender a real bridge fee — a paid-for nuisance, not an amplification.
+    ///
+    ///      Note the two griefing cases in the list above are NOT in this branch: a front-running
+    ///      direct mint and a two-spoke collision both surface as `AlreadyMinted` (mintTo checks
+    ///      registration BEFORE `hasMinted`), which stays terminal and consumed — and in both the
+    ///      token was in fact minted to the wallet, so nothing is lost. Removing the pending gate
+    ///      does not re-open them.
+    ///
+    ///      Do NOT reintroduce a hub-side pending check here. It cannot observe spoke state.
     /// @param wallet Wallet to mint for (must be registered in StolenWalletRegistry)
     /// @param origin Origin domain for event
     function _handleWalletMint(address wallet, uint32 origin) internal {
-        // Call WalletSoulbound.mintTo - it will revert if wallet is not registered
-        // or if already minted (those checks are in WalletSoulbound)
         try WalletSoulbound(walletSoulbound).mintTo(wallet) {
             emit CrossChainMintExecuted(MintType.WALLET, wallet, origin);
         } catch (bytes memory reason) {
+            // TRANSIENT — revert so Hyperlane re-delivers. No {MintFailed}: this frame is about
+            // to be discarded, so the log would be too.
+            //   - empty reason: sub-call out-of-gas under the 63/64 rule; more gas may succeed.
+            //   - NotRegistered: the registration message may still be in flight. See above for
+            //     why this is not conditioned on any pending check.
+            if (reason.length == 0 || _hasSelector(reason, WalletSoulbound.NotRegistered.selector)) {
+                revert SoulboundReceiver__WalletMintFailed();
+            }
+            // TERMINAL (already minted, or any other cause) — consume the message, loudly.
             emit MintFailed(MintType.WALLET, wallet, origin, reason);
-            revert SoulboundReceiver__WalletMintFailed();
         }
     }
 
     /// @notice Execute support soulbound mint
+    /// @dev Same split as {_handleWalletMint}. The transient cause here is `NotAuthorizedMinter`:
+    ///      it means this receiver has not been (or has been un-) authorized on the soulbound
+    ///      contract, which the owner can fix, after which the retry succeeds. Everything else
+    ///      (zero supporter, terminal failures) is consumed.
     /// @param supporter Address to mint for
     /// @param donationAmount Donation amount (for metadata tracking - actual ETH stays on spoke)
     /// @param origin Origin domain for event
@@ -129,8 +211,31 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
             emit CrossChainMintExecuted(MintType.SUPPORT, supporter, origin);
         } catch (bytes memory reason) {
             emit MintFailed(MintType.SUPPORT, supporter, origin, reason);
-            revert SoulboundReceiver__SupportMintFailed();
+            if (reason.length == 0 || _hasSelector(reason, BaseSoulbound.NotAuthorizedMinter.selector)) {
+                revert SoulboundReceiver__SupportMintFailed();
+            }
         }
+    }
+
+    /// @notice Identifies WHICH custom error a `try/catch` caught, so the transient causes can be
+    ///         re-reverted for redelivery and the terminal ones consumed. Returning false on a
+    ///         short payload means an undecodable failure is treated as terminal, not transient.
+    /// @dev Does a captured revert payload start with `selector`?
+    /// @param reason Raw revert data from a `try/catch`
+    /// @param selector The 4-byte custom-error selector to match
+    /// @return True if the payload is at least 4 bytes and its first 4 bytes equal `selector`
+    function _hasSelector(bytes memory reason, bytes4 selector) internal pure returns (bool) {
+        if (reason.length < 4) return false;
+        bytes4 found;
+        // Suppressed, not fixed: reading the leading 4 bytes of a `bytes memory` payload has no
+        // Solidity-level equivalent that is not strictly worse (slicing allocates a copy). The
+        // read is bounded by the `reason.length < 4` guard above, so it cannot run past the
+        // buffer, and it touches no state.
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            found := mload(add(reason, 0x20))
+        }
+        return found == selector;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -138,11 +243,26 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ISoulboundReceiver
-    /// @dev Immediate during initial setup, timelocked after completeSetup()
-    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner onlyDuringSetup {
-        if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
+    /// @dev Granting trust is immediate during setup and timelocked after completeSetup().
+    ///      Passing address(0) un-trusts the domain and stays immediate at all times: it only
+    ///      ever narrows what this contract accepts, and it is the targeted emergency response
+    ///      to a compromised spoke forwarder (the alternative, pause(), stops every domain).
+    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        if (forwarder != address(0) && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);
+    }
+
+    /// @notice Pause cross-chain mint handling
+    /// @dev Kill switch for the whole receiver. Hyperlane messages that revert in `handle` are
+    ///      not lost — they can be re-processed once unpaused.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume cross-chain mint handling
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /// @notice Propose a trusted forwarder change (2-day delay)
@@ -165,6 +285,21 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
         emit TrustedForwarderUpdated(domain, forwarder);
     }
 
+    /// @notice Recover ETH held by this contract
+    /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
+    ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
+    ///      be locked forever.
+    ///      Takes an explicit recipient rather than paying `msg.sender` — see
+    ///      {CrossChainInbox.sweep} for why a DAO owner makes that distinction matter.
+    /// @param to Recipient of the swept balance
+    function sweep(address to) external onlyOwner {
+        if (to == address(0)) revert SoulboundReceiver__ZeroAddress();
+        uint256 amount = address(this).balance;
+        (bool success,) = to.call{ value: amount }("");
+        if (!success) revert SoulboundReceiver__SweepFailed();
+        emit Swept(to, amount);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -174,6 +309,6 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
         return _trustedForwarders[domain];
     }
 
-    // Note: No receive() function - this contract doesn't need to accept ETH.
-    // Cross-chain support mints use mintTo() which doesn't transfer ETH (donations stay on spoke).
+    // Note: No receive() function — ETH is not expected here. `handle` is payable only because
+    // Hyperlane v3 requires it; anything a hook does forward can be recovered via sweep().
 }

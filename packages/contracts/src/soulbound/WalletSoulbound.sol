@@ -42,8 +42,9 @@ contract WalletSoulbound is BaseSoulbound {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Thrown when wallet is not registered or pending in the registry
-    error NotRegisteredOrPending();
+    /// @notice Thrown when wallet has not completed registration in the registry
+    /// @dev A merely pending wallet is deliberately NOT eligible — see the note on `mintTo`.
+    error NotRegistered();
 
     /// @notice Thrown when wallet has already minted its soulbound token
     error AlreadyMinted();
@@ -86,16 +87,25 @@ contract WalletSoulbound is BaseSoulbound {
     // MINT FUNCTION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Mint a soulbound token for a registered/pending wallet
+    /// @notice Mint a soulbound token for a REGISTERED wallet
     /// @dev Anyone can pay for the mint - the token goes to the wallet.
     ///      This supports the drained wallet scenario where the owner
     ///      can't pay gas but a friend/relayer can help.
     ///      SVG auto-selects language based on viewer's browser settings.
-    /// @param wallet The wallet address to mint for (must be registered or pending)
+    ///
+    ///      Registration only — a merely PENDING wallet is NOT eligible. A pending wallet has
+    ///      completed just the first of two EIP-712 phases; the registration may still expire
+    ///      or be abandoned, and the whole point of the two-phase design is that one signature
+    ///      is not a registration. Because this function is permissionless and `hasMinted` is
+    ///      set unconditionally, allowing the pending state let any third party mint an
+    ///      irrevocable token asserting "this wallet has been registered as stolen" during the
+    ///      ~1-13 minute acknowledgement window — and simultaneously burn the wallet's only
+    ///      mint, so it could never mint once it legitimately registered.
+    /// @param wallet The wallet address to mint for (must be registered)
     function mintTo(address wallet) external payable {
-        // Check wallet is in registry (registered or pending acknowledgement)
-        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
-            revert NotRegisteredOrPending();
+        // Registered only — see the note above on why pending is deliberately excluded.
+        if (!registry.isWalletRegistered(wallet)) {
+            revert NotRegistered();
         }
 
         // Enforce one per wallet
@@ -158,7 +168,9 @@ contract WalletSoulbound is BaseSoulbound {
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Check if a wallet is eligible to mint (registered or pending, not already minted)
+    /// @notice Check if a wallet is eligible to mint (registered, not already minted)
+    /// @dev Mirrors {mintTo} exactly, including the registered-not-pending requirement, so the
+    ///      UI never offers a mint the transaction would reject.
     /// @param wallet The wallet to check
     /// @return eligible True if wallet can mint
     /// @return reason Description if not eligible
@@ -166,7 +178,10 @@ contract WalletSoulbound is BaseSoulbound {
         if (hasMinted[wallet]) {
             return (false, "Already minted");
         }
-        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
+        if (!registry.isWalletRegistered(wallet)) {
+            if (registry.isWalletPending(wallet)) {
+                return (false, "Registration is not complete yet");
+            }
             return (false, "This wallet is not registered");
         }
         return (true, "");

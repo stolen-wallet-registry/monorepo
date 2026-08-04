@@ -16,7 +16,17 @@ import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 
-const DISMISS_KEY = 'swr-wallet-status-dismissed';
+// Stored shape: string[] of lowercased addresses.
+//
+// The `:v1` suffix exists so that a future change to THAT SHAPE bumps to `:v2` and the old
+// data is simply ignored, rather than being fed to code that can no longer read it. The rule
+// is "bump when the shape changes", not "bump on principle" — a version bump with an
+// unchanged shape only discards data for no benefit.
+//
+// No migration from an earlier key name is provided, and none should be added: the app has
+// never been deployed (local only — no mainnet, no testnet), so there is no stored data
+// anywhere to migrate.
+const DISMISS_KEY = 'swr-wallet-status-dismissed:v1';
 
 export interface ConnectedWalletStatusProps {
   /** Show even if previously dismissed */
@@ -156,6 +166,7 @@ export function ConnectedWalletStatus({
               value={address}
               type="address"
               truncate={false}
+              resolveEns={false}
               showDisabledIcon={false}
               className="inline"
             />
@@ -195,6 +206,7 @@ export function ConnectedWalletStatus({
               value={address}
               type="address"
               truncate={false}
+              resolveEns={false}
               showDisabledIcon={false}
               className="inline"
             />

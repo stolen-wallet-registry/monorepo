@@ -27,6 +27,32 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MAX_BATCH_SIZE',
     inputs: [],
     outputs: [
@@ -100,6 +126,64 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'activateHub',
+    inputs: [
+      {
+        name: 'newHub',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOperatorSubmitter',
+    inputs: [
+      {
+        name: 'newOperatorSubmitter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'batchCount',
     inputs: [],
     outputs: [
@@ -110,6 +194,26 @@ export const WalletRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -176,45 +280,6 @@ export const WalletRegistryABI = [
         name: '',
         type: 'address',
         internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'generateHashStruct',
-    inputs: [
-      {
-        name: 'reportedChainId',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: 'incidentTimestamp',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: 'trustedForwarder',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -351,6 +416,40 @@ export const WalletRegistryABI = [
         name: 'isExpired',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -577,6 +676,44 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -587,6 +724,45 @@ export const WalletRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeHub',
+    inputs: [
+      {
+        name: 'newHub',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOperatorSubmitter',
+    inputs: [
+      {
+        name: 'newOperatorSubmitter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -679,6 +855,11 @@ export const WalletRegistryABI = [
       },
       {
         name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'windowBlock',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -823,6 +1004,19 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -853,6 +1047,51 @@ export const WalletRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -1013,6 +1252,12 @@ export const WalletRegistryABI = [
   },
   {
     type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'WalletAcknowledged',
     inputs: [
       {
@@ -1149,6 +1394,66 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__AlreadyAcknowledged',
     inputs: [],
   },
@@ -1179,6 +1484,11 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__DeadlineTooFarInFuture',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__EmptyBatch',
     inputs: [],
   },
@@ -1204,6 +1514,11 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__InvalidIncidentTimestamp',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__InvalidNonce',
     inputs: [],
   },
@@ -1214,17 +1529,7 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'WalletRegistry__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'WalletRegistry__InvalidStep',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'WalletRegistry__NotAcknowledged',
     inputs: [],
   },
   {

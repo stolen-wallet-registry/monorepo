@@ -28,7 +28,6 @@ interface IFraudRegistryHub {
     error FraudRegistryHub__ZeroAddress();
     error FraudRegistryHub__OnlyInbox();
     error FraudRegistryHub__InvalidIdentifierLength();
-    error FraudRegistryHub__UnknownRegistryType();
     error FraudRegistryHub__WithdrawFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════

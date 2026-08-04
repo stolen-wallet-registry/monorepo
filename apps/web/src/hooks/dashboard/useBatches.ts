@@ -13,7 +13,12 @@ import {
   type RawRecentContractBatchesResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
-import { INDEXER_URL } from '@/lib/indexer';
+import {
+  INDEXER_URL,
+  parseIndexerAddress,
+  parseIndexerHash,
+  logDroppedIndexerRow,
+} from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 export type BatchType = 'wallet' | 'transaction' | 'contract';
@@ -107,14 +112,21 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
 
       if (walletsRes) {
         for (const raw of walletsRes.walletBatchs.items) {
+          const submitter = parseIndexerAddress(raw.operator);
+          const transactionHash = parseIndexerHash(raw.transactionHash);
+          if (!submitter || !transactionHash) {
+            logDroppedIndexerRow('walletBatch', raw.id);
+            continue;
+          }
+
           batches.push({
             id: raw.id,
             type: 'wallet',
-            submitter: raw.operator as Address,
+            submitter,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.walletCount,
             registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            transactionHash,
             operatorId: raw.operatorId,
           });
         }
@@ -122,14 +134,21 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
 
       if (transactionsRes) {
         for (const raw of transactionsRes.transactionBatchs.items) {
+          const submitter = parseIndexerAddress(raw.reporter);
+          const transactionHash = parseIndexerHash(raw.transactionHash);
+          if (!submitter || !transactionHash) {
+            logDroppedIndexerRow('transactionBatch', raw.id);
+            continue;
+          }
+
           batches.push({
             id: raw.id,
             type: 'transaction',
-            submitter: raw.reporter as Address,
+            submitter,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.transactionCount,
             registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            transactionHash,
             isOperator: raw.isOperator,
             operatorId: raw.operatorId,
             dataHash: raw.dataHash,
@@ -139,14 +158,21 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
 
       if (contractsRes) {
         for (const raw of contractsRes.fraudulentContractBatchs.items) {
+          const submitter = parseIndexerAddress(raw.operator);
+          const transactionHash = parseIndexerHash(raw.transactionHash);
+          if (!submitter || !transactionHash) {
+            logDroppedIndexerRow('contractBatch', raw.id);
+            continue;
+          }
+
           batches.push({
             id: raw.id,
             type: 'contract',
-            submitter: raw.operator as Address,
+            submitter,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.contractCount,
             registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            transactionHash,
             operatorId: raw.operatorId,
           });
         }

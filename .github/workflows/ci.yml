@@ -1,0 +1,343 @@
+name: CI
+
+# ╔══════════════════════════════════════════════════════════════════════════════════════╗
+# ║  NOTHING RUNS UNLESS YOU ASK FOR IT.                                                 ║
+# ║                                                                                      ║
+# ║  Two ways to ask, both manual:                                                        ║
+# ║    1. Add the `ci` label to a PR (remove + re-add to re-run)                          ║
+# ║    2. Actions -> CI -> "Run workflow", and tick the jobs you want                     ║
+# ║                                                                                      ║
+# ║  Opening a PR runs nothing. Pushing to a PR runs nothing, even one already carrying   ║
+# ║  the label. A PR with no checks on it is the normal state — do not read the absence   ║
+# ║  of red as green, and do not make any of these a required status check.               ║
+# ║                                                                                      ║
+# ║  Everything here also runs locally, for free:                                         ║
+# ║    pnpm check                 # lint + typecheck + test + format + syncpack + knip    ║
+# ║    cd packages/contracts && forge test                                                ║
+# ╚══════════════════════════════════════════════════════════════════════════════════════╝
+#
+# There is deliberately no `push` trigger and no `schedule`, and the `pull_request` trigger
+# below listens for `labeled` ONLY — not `opened`, not `synchronize`. Actions minutes cost money
+# and this project is pre-release and local-only; nothing here should ever spend them on its own.
+#
+# The dispatch checkboxes exist for the same reason: running this should not cost five runners
+# when you only wanted `forge test`. They default to on, so a plain "Run workflow" is still the
+# full sweep. (The `ci` label runs everything — GitHub has no way to pass inputs from a label.)
+on:
+  # `labeled` only. Adding ANY label starts a workflow run, but every job below checks for `ci`
+  # specifically, and a skipped job consumes no runner minutes — so an unrelated label costs
+  # nothing. Pushing new commits does not re-run: remove and re-add the label.
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      contracts:
+        description: 'Contracts (forge test + gas)'
+        type: boolean
+        default: true
+      node:
+        description: 'Node (lint / typecheck / test / format)'
+        type: boolean
+        default: true
+      abi_drift:
+        description: 'ABI drift (regenerate with Foundry and compare)'
+        type: boolean
+        default: true
+      supply_chain:
+        description: 'Supply chain (lockfile integrity + audit)'
+        type: boolean
+        default: true
+      abi_freshness:
+        description: 'ABI freshness (git-only, seconds — compares this branch against main)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege for GITHUB_TOKEN, workflow-wide.
+#
+# Nothing here writes to the repository: no job pushes a commit, opens a PR, publishes a
+# package or posts a comment. Without this block every job inherits the repository's DEFAULT
+# token scope, which on many repos is read-write — and the `supply-chain` job below reasons
+# explicitly about "a hostile postinstall in a newly-added dependency" executing "on a runner
+# holding the repo token". It passes `--ignore-scripts` to stop that from running; this line
+# is what makes the token worthless if it ever does.
+#
+# If a job later needs to write (a release, a bot comment), grant it at THAT job's level
+# rather than widening this one.
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  # Gated like everything else — this used to run on every PR, and no longer does.
+  #
+  # `pnpm install --frozen-lockfile` fails if pnpm-lock.yaml disagrees with any package.json,
+  # which is the useful half. `--ignore-scripts` means a postinstall in a newly-added dependency
+  # does not execute on a runner holding the repo token while we are verifying it.
+  supply-chain:
+    name: Supply chain (lockfile + audit)
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.supply_chain)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Fails if pnpm-lock.yaml disagrees with any package.json. This is the blocking half.
+      - name: Verify lockfile matches manifests
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # ADVISORY, NOT BLOCKING — and that is a measured decision, not an oversight.
+      #
+      # Measured 2026-07-31 on this tree, workspace-wide (`pnpm audit`): 245 advisories,
+      # 86 high, 5 critical. `--audit-level=high` here would fail on the first run and stay
+      # failing, which does not make anything safer: a check that is always red gets ignored,
+      # and it would block every unrelated PR from merging. Most of that count is devDependency
+      # tooling (docs site, Storybook, indexer) that never ships to a user's browser.
+      #
+      # V30 (dropping @hyperlane-xyz/sdk in favour of a local viem `parseEventLogs`) has LANDED
+      # — see PRPs/security-audit-2026-07-30.md. That, plus a root `pnpm.overrides` pin of
+      # shell-quote to >=1.8.4 (the last critical in the shipped graph, reached via
+      # @libp2p/webrtc > react-native-webrtc > react-native > react-devtools-core), takes
+      # production-only (`pnpm audit --prod`) to 155 advisories, 57 high, 0 critical.
+      #
+      # NEXT STEP — the viable blocking gate is the production-only one, which is green today:
+      #
+      #     pnpm audit --prod --audit-level=critical
+      #
+      # Add that as a separate, blocking step (no continue-on-error) so any new critical in the
+      # shipped dependency graph fails the build, and keep this workspace-wide run advisory.
+      # Deliberately not done in the same change that made it green, so the flip is reviewed on
+      # its own. Deferred: the duplicate viem 2.23.2 pulled by @walletconnect/utils — an
+      # override there risks breaking WalletConnect signing and there is no smoke test for it.
+      - name: Audit dependencies (advisory)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+  contracts:
+    name: Contracts (forge)
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.contracts)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: stable
+
+      - name: Check formatting
+        working-directory: packages/contracts
+        run: forge fmt --check
+
+      - name: Build
+        working-directory: packages/contracts
+        run: forge build --sizes
+
+      - name: Test
+        working-directory: packages/contracts
+        run: forge test
+
+  node:
+    name: Node (lint / typecheck / test)
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.node)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint / typecheck / test
+        run: pnpm turbo lint typecheck test --filter='!@swr/contracts'
+
+      # solhint ran in NEITHER job (round-3 review I-2): the `contracts` job invokes forge
+      # directly and never calls it, and the filter above excludes @swr/contracts wholesale —
+      # so `@swr/contracts#lint` was defined in turbo.json and executed by nothing, on every
+      # configuration including workflow_dispatch.
+      #
+      # `lint:sol`, not `lint`: the combined task is `solhint && forge fmt --check`, and this
+      # job has no Foundry. `forge fmt --check` is already the contracts job's first step, so
+      # splitting them puts each half in the job that can actually run it rather than adding a
+      # second Solidity toolchain install here. Verified locally: @swr/contracts#lint:sol has
+      # no build dependency and needs nothing but node_modules.
+      - name: Solidity lint (solhint)
+        run: pnpm turbo lint:sol --filter=@swr/contracts
+
+      # Nothing in this workflow built anything before this step, so a change that typechecks
+      # but breaks the PRODUCTION bundle reached Vercel uncaught. Those are different failures:
+      # `tsc` never resolves a dynamic import, runs a Vite plugin, evaluates a Next server
+      # component, or notices a missing Node polyfill — and apps/web/vite.config.ts carries an
+      # explicit warning that the wallet and P2P stacks "break at runtime (not at build time)"
+      # without `buffer`/`process`.
+      #
+      # `!@swr/contracts` because that package's build is Foundry, which this job has no
+      # toolchain for; the `contracts` job covers it.
+      - name: Build (production bundles)
+        run: pnpm turbo build --filter='!@swr/contracts'
+
+      - name: Prettier check
+        run: pnpm exec prettier --check "**/*.{ts,tsx,js,json,md,mdx}"
+
+      # The remaining two thirds of `pnpm check`. Without these, a CI run would be weaker than
+      # running `pnpm check` locally — which, since this workflow is manual, is the thing it is
+      # actually competing with.
+      - name: Dependency version consistency
+        run: pnpm syncpack:check
+
+      # NOT `pnpm knip` — the root script passes `--no-exit-code`, which makes it advisory by
+      # construction and unable to fail anything. That form is right for a local script and
+      # useless as a gate, so CI invokes knip directly.
+      #
+      # `--exclude unresolved` drops one known false-positive class: knip parses Tailwind v4
+      # `@source "../components/**/*.tsx"` directives in packages/ui/src/styles/index.css as
+      # CSS imports and reports the globs as unresolved. Delete this flag once knip.json
+      # carries an `ignoreUnresolved` entry for them; every other issue class still fails.
+      - name: Unused files, exports and dependencies
+        run: pnpm exec knip --exclude unresolved
+
+  abi-drift:
+    name: ABI drift
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.abi_drift)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: stable
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        working-directory: packages/contracts
+        run: forge build
+
+      # Runs BETWEEN `forge build` and `export-abi`, and the order is the whole point: this
+      # compares the freshly-built Forge artifacts against the ABIs as COMMITTED. Run it after
+      # export-abi and the committed files have already been overwritten with the fresh ones,
+      # so the comparison is trivially true and the guard proves nothing.
+      #
+      # SWR_REQUIRE_FORGE_ARTIFACTS=1 makes absent artifacts a failure rather than a skip. The
+      # Node job installs no Foundry, so the guard silently skips there; this is the one job
+      # that can satisfy it, and therefore the one job where it must be strict.
+      - name: Check error catalogue against freshly-built artifacts
+        env:
+          SWR_REQUIRE_FORGE_ARTIFACTS: '1'
+        run: pnpm --filter @swr/errors test
+
+      - name: Regenerate ABIs
+        working-directory: packages/contracts
+        run: pnpm export-abi
+
+      # export-abi emits raw JSON.stringify output while the committed ABIs are
+      # Prettier-formatted, so the formatter must run before diffing or every
+      # run reports a whole-tree diff.
+      - name: Format generated ABIs
+        run: pnpm exec prettier --write "packages/abis/src/*.ts"
+
+      - name: Fail if ABIs are stale
+        run: git diff --exit-code -- packages/abis/src
+
+  # The cheap half of the ABI check: pure git, no toolchain, a few seconds.
+  #
+  # `packages/abis` is a source-only package: the TypeScript ABI constants are committed, it
+  # has no build step, and nothing in the turbo graph depends on `@swr/contracts#export-abi`.
+  # That is on purpose — wiring export-abi into the frontend build would make every
+  # `turbo build` (including host builds with no Foundry installed) require the Solidity
+  # toolchain. The cost is that `turbo build` will happily bundle apps/web against ABIs
+  # generated from an arbitrarily old contract commit.
+  #
+  # This cannot tell whether a Solidity change actually altered the ABI — it only asserts that
+  # if `packages/contracts/src` changed, the generated ABIs were regenerated alongside it.
+  # False positives (comment-only or implementation-only edits) are expected and are cleared by
+  # regenerating anyway, since the resulting diff will be empty. `abi-drift` above is the
+  # authoritative check; this one is the one worth running on every dispatch because it costs
+  # almost nothing.
+  abi-freshness:
+    name: ABI freshness (git only)
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.abi_freshness)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Contracts changed without regenerating ABIs
+        env:
+          # On a labelled PR the base is the PR's own base commit. On a manual dispatch there is
+          # no pull_request context at all, so fall back to the default branch — which means
+          # dispatching this while ON the default branch compares it to itself and trivially
+          # passes. That is what "no changes relative to main" means; run it from the branch.
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${PR_BASE_SHA:-}" ]; then
+            base="$PR_BASE_SHA"
+          else
+            # `fetch-depth: 0` gives full history for the checked-out ref, but the default
+            # branch's remote-tracking ref is not guaranteed to be present. Fetch it.
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="origin/$DEFAULT_BRANCH"
+          fi
+
+          # THREE dots, not two (round-3 review I-3). Two-dot `git diff A B` also reports the
+          # INVERSE of everything that landed on the base since this branch forked, so an
+          # unrelated Solidity merge on main would fail this check for a file this branch never
+          # touched. `A...B` diffs from the merge base.
+          changed=$(git diff --name-only "$base...HEAD")
+
+          if ! grep -qE '^packages/contracts/src/.*\.sol$' <<<"$changed"; then
+            echo "No Solidity source changes relative to $base — nothing to check."
+            exit 0
+          fi
+
+          if grep -qE '^packages/abis/src/' <<<"$changed"; then
+            echo "Solidity changed and packages/abis/src was regenerated alongside it."
+            exit 0
+          fi
+
+          echo "::error::Solidity sources under packages/contracts/src changed but packages/abis/src was not regenerated. Run 'cd packages/contracts && forge build && pnpm export-abi' then 'pnpm exec prettier --write \"packages/abis/src/*.ts\"' and commit the result."
+          exit 1

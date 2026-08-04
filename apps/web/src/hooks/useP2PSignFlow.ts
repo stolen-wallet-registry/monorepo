@@ -16,13 +16,14 @@ import type { Libp2p } from 'libp2p';
 import { useSignEIP712, type SignParams } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { type SignatureStep } from '@/lib/signatures';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
-import { passStreamData, getPeerConnection } from '@/lib/p2p';
+import { passStreamData, getPeerConnection, SIGN_BLOCKED_MESSAGE } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
-import type { Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 export interface P2PSignFlowConfig {
   /** Which signature step (ACKNOWLEDGEMENT or REGISTRATION) */
@@ -53,9 +54,9 @@ export interface P2PSignFlowResult {
   /** Current nonce */
   nonce: bigint | undefined;
   /** Registeree address from form store */
-  registeree: string | null;
+  registeree: Address | null;
   /** Relayer address from form store */
-  relayer: string | null;
+  relayer: Address | null;
   /** Connected chain ID */
   chainId: number;
   /** Trigger signing and P2P sending */
@@ -67,12 +68,23 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
 
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registeree, relayer } = useFormStore();
+  const { registeree, relayer, relayerFromPeerSession } = useFormStore();
   const { partnerPeerId } = useP2PStore();
 
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [signature, setSignature] = useState<Hex | null>(null);
+
+  /**
+   * In-flight latch for `handleSign`.
+   *
+   * `isSending` is only set AFTER signing resolves, so it cannot guard the window that
+   * matters: two clicks while the wallet prompt is open produce two signatures, each with its
+   * own freshly-resolved `windowBlock`, and both are written to the relayer's stream. The
+   * relayer stores whichever arrives last and the victim has already approved two prompts. A
+   * ref rather than state because it must be set synchronously inside the same click.
+   */
+  const signInFlightRef = useRef(false);
 
   // Use ref for getter to avoid callback re-creation when parent re-renders
   const getLibp2pRef = useRef(getLibp2p);
@@ -94,12 +106,14 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     data: hashData,
     isLoading: isLoadingHash,
     error: hashError,
+    refetch: refetchHashStruct,
   } = useGenerateHashStruct(relayer || undefined, signatureStep);
 
   const {
     nonce,
     isLoading: isLoadingNonce,
     error: nonceError,
+    refetch: refetchNonce,
   } = useContractNonce(registeree || undefined);
 
   const {
@@ -111,7 +125,12 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     reset: resetSign,
   } = useSignEIP712();
 
-  const signFn = signType === 'acknowledgement' ? signAcknowledgement : signRegistration;
+  // Registration only: the signature commits to the hash of a block at or after the
+  // acknowledgement's grace-period start, so the signer needs the start block to refuse early.
+  const { data: deadlines } = useContractDeadlines(
+    signType === 'registration' ? (registeree ?? undefined) : undefined
+  );
+  const gracePeriodStart = deadlines?.start;
 
   const getStatus = (): SignatureStatus => {
     if (signature) return 'success';
@@ -121,6 +140,11 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
   };
 
   const handleSign = useCallback(async () => {
+    if (signInFlightRef.current) {
+      logger.p2p.warn('Sign already in progress, ignoring duplicate call', { keyRef });
+      return;
+    }
+
     const libp2p = getLibp2pRef.current();
     if (
       !hashData ||
@@ -134,9 +158,53 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       return;
     }
 
+    // `relayer` becomes the `trustedForwarder` inside the signed message, and whoever holds
+    // that role can complete the irreversible registration on their own schedule. It is only
+    // trustworthy if it arrived from a CONNECT handshake in this session — a value restored
+    // from localStorage may have been written by anyone with access to this browser profile.
+    // A reload at this step does not re-run CONNECT, so without this check the persisted
+    // value is what gets signed.
+    if (!relayerFromPeerSession) {
+      logger.p2p.warn('Refusing to sign: relayer was not established by a handshake this session', {
+        keyRef,
+      });
+      // The old copy told the user to "reconnect to your relayer before signing" — a recovery
+      // that had no code path anywhere in the app, so the honest instruction was "start over"
+      // and the flow dead-ended here. `SIGN_BLOCKED_MESSAGE` describes what is actually
+      // happening now: the page is re-running the handshake by itself (see
+      // `lib/p2p/rehandshake.ts`), and says what to do if that does not clear it.
+      setSendError(SIGN_BLOCKED_MESSAGE);
+      return;
+    }
+
+    signInFlightRef.current = true;
     try {
       setSendError(null);
       resetSign();
+
+      // Refetch nonce and deadline before signing - never sign with cached values.
+      // acknowledge() increments nonces[registeree], so a registration signed with the
+      // cached nonce reverts. In this flow the revert surfaces on the RELAYER's machine
+      // after the signature has already shipped over libp2p, with no way for the
+      // registeree to learn what went wrong — so failing here, before sending, is the
+      // only recoverable point.
+      const [nonceResult, hashResult] = await Promise.all([refetchNonce(), refetchHashStruct()]);
+
+      const freshNonce =
+        nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
+      // getSignatureDeadline returns a bare uint256 (the old generateHashStruct tuple is gone),
+      // so anything non-bigint means the refetch failed and we fall back to the cached value.
+      const freshDeadline =
+        typeof hashResult?.data === 'bigint' ? hashResult.data : hashData.deadline;
+
+      if (freshNonce === undefined) {
+        logger.p2p.error('Failed to refetch nonce before signing', {
+          keyRef,
+          nonceStatus: nonceResult.status,
+        });
+        setSendError('Failed to load fresh signing data. Please try again.');
+        return;
+      }
 
       const { reportedChainId, incidentTimestamp } = stableFields;
 
@@ -145,11 +213,21 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
         trustedForwarder: relayer,
         reportedChainId,
         incidentTimestamp,
-        nonce,
-        deadline: hashData.deadline,
+        nonce: freshNonce,
+        deadline: freshDeadline,
+        gracePeriodStart,
       };
 
-      const sig = await signFn(params);
+      // Registration returns the freshness commitment alongside the signature; the relayer
+      // cannot rebuild the digest or the calldata without it, so both go on the wire.
+      let sig: Hex;
+      let windowBlock: bigint | undefined;
+      let windowBlockHash: Hash | undefined;
+      if (signType === 'registration') {
+        ({ signature: sig, windowBlock, windowBlockHash } = await signRegistration(params));
+      } else {
+        sig = await signAcknowledgement(params);
+      }
 
       // Set isSending before signature to avoid a brief "success" flash in getStatus()
       // (signature being set while isSending is false would momentarily return 'success')
@@ -165,12 +243,14 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
           signature: {
             keyRef,
             value: sig,
-            deadline: hashData.deadline.toString(),
-            nonce: nonce.toString(),
+            deadline: freshDeadline.toString(),
+            nonce: freshNonce.toString(),
             address: registeree,
             chainId,
             reportedChainId: reportedChainId.toString(),
             incidentTimestamp: incidentTimestamp.toString(),
+            windowBlock: windowBlock?.toString(),
+            windowBlockHash,
           },
         },
       });
@@ -185,20 +265,27 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       setSendError(message);
     } finally {
       setIsSending(false);
+      signInFlightRef.current = false;
     }
   }, [
     hashData,
     address,
     partnerPeerId,
+    relayerFromPeerSession,
     registeree,
     relayer,
     nonce,
     chainId,
     stableFields,
-    signFn,
+    signType,
+    signAcknowledgement,
+    signRegistration,
+    gracePeriodStart,
     resetSign,
     protocol,
     keyRef,
+    refetchNonce,
+    refetchHashStruct,
   ]);
 
   const isLoading = isLoadingHash || isLoadingNonce;

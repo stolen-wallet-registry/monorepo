@@ -7,11 +7,14 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
+import type { Libp2p } from 'libp2p';
 
-import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
+  deriveTransactionStatus,
+  deriveCrossChainStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -20,27 +23,35 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
+import { RelayedSignatureReview } from '@/components/composed/RelayedSignatureReview';
+import { useRelayedTxSignatureReview } from '@/hooks/p2p/useRelayedSignatureReview';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { areAddressesEqual } from '@/lib/address';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistration,
   useTxQuoteFeeBreakdown,
   useTxGasEstimate,
-  useTxCrossChainConfirmation,
-  needsTxCrossChainConfirmation,
+  useTxContractDeadlines,
   type TxRegistrationParams,
   type TxRegistrationParamsHub,
   type TxRegistrationParamsSpoke,
 } from '@/hooks/transactions';
+import {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+} from '@/hooks/useCrossChainConfirmation';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import {
   getTxSignature,
+  removeTxSignature,
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
+import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { getTxPreviousStep } from '@/stores/transactionRegistrationStore';
 import type { Hash } from '@/lib/types/ethereum';
-import { parseSignature } from '@/lib/signatures';
+import { parseSignature, isWindowBlockStale, describeWindowBlockStale } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
@@ -50,6 +61,12 @@ import {
   getBridgeMessageByIdUrl,
 } from '@/lib/explorer';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
+import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
+import { useP2PStore } from '@/stores/p2pStore';
+import { armResignAck, waitForResignAck, type ResignAckOutcome } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -57,16 +74,31 @@ import { AlertCircle } from 'lucide-react';
 export interface TxRegisterPayStepProps {
   /** Called when step is complete */
   onComplete: () => void;
+  /**
+   * P2P relay only: getter for the relayer's libp2p node, used to ask the reporter to sign
+   * again when a revert kills the relayed signature. Optional because the standard and
+   * self-relay flows render this step with no peer at all. Without it the P2P path still
+   * discards the dead signature — it just cannot deliver the request, and says so.
+   *
+   * A getter, not the node: libp2p is a Proxy that throws when React DevTools serialises it.
+   */
+  getLibp2p?: () => Libp2p | null;
 }
 
 /**
  * Transaction batch registration payment step - submits the REG transaction.
  */
-export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
+export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
-    useTransactionRegistrationStore();
+  const {
+    registrationType,
+    step,
+    setStep,
+    bridgeMessageId,
+    setRegistrationHash,
+    setBridgeMessageId,
+  } = useTransactionRegistrationStore();
   const {
     selectedTxHashes,
     selectedTxDetails,
@@ -96,7 +128,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   });
 
   // Check if this is a cross-chain registration (spoke → hub)
-  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const isCrossChain = needsCrossChainConfirmation(chainId);
   const hubChainId = getHubChainId(chainId);
 
   // Get registration fee breakdown (chain-aware: hub vs spoke)
@@ -117,18 +149,52 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const [storedSignatureState, setStoredSignatureState] = useState<ReturnType<
     typeof getTxSignature
   > | null>(null);
+  /**
+   * P2P only. Set once Retry has discarded a dead relayed signature; `notified` records
+   * whether the reporter actually received the request to sign again, and `windowClosed`
+   * whether they have to restart from the acknowledgement rather than just re-sign.
+   */
+  const [resignRequest, setResignRequest] = useState<{
+    notified: boolean | null;
+    windowClosed: boolean;
+    /** The reporter's answer, or null while the request is still in flight. */
+    ack: ResignAckOutcome | null;
+  } | null>(null);
+  const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
+  const pairedWallet = useP2PStore((s) => s.pairedWallet);
+
+  /**
+   * The forwarder as it stands NOW, not as it stood when the signature was made.
+   *
+   * The gas wallet is part of the EIP-712 struct but not part of the signature's storage key,
+   * so a reporter who goes back and changes it gets the OLD signature handed back — and the
+   * pay step then insists they connect the wallet they just replaced, with no re-sign path
+   * out. Passing this to `getTxSignature` makes that a "please sign again" instead. See the
+   * `expectedForwarder` note there; the wallet flow has carried this since its own version of
+   * the bug.
+   */
+  const liveForwarder = useTransactionFormStore((s) => s.forwarder) ?? undefined;
+
+  /**
+   * Who the signature must belong to. Part of the storage key: `dataHash` commits to the batch
+   * and nothing else, so without this a browser that handled two reporters with the same batch
+   * on the same chain hands back the first one's signature.
+   */
+  const formReporter = useTransactionFormStore((s) => s.reporter) ?? undefined;
 
   // Get stored signature (client-only)
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-    if (!dataHash) {
+    if (!dataHash || !formReporter) {
       setStoredSignatureState(null);
       return;
     }
-    setStoredSignatureState(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION));
-  }, [dataHash, chainId]);
+    setStoredSignatureState(
+      getTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION, liveForwarder)
+    );
+  }, [dataHash, chainId, liveForwarder, formReporter]);
 
   // Expected wallet for this step: forwarder (gas wallet) for relayed flows, reporter for standard
   const expectedWallet = storedSignatureState
@@ -141,6 +207,52 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const isCorrectWallet = Boolean(
     address && expectedWallet && areAddressesEqual(address, expectedWallet)
   );
+
+  // P2P relay only: the signature arrived from a peer over the network, so before the
+  // relayer pays for it, recover the signer from the EIP-712 digest, re-read the nonce from
+  // the contract, and check the deadline. Self-relay and standard skip this — the connected
+  // wallet signed it itself, there is no peer to distrust.
+  const isP2PRelayed = registrationType === 'p2pRelay';
+
+  // The contract reuses DeadlineExpired for a stale signature timestamp (fixable by
+  // re-signing) AND a registration window that closed on-chain (unfixable by any new
+  // signature). Distinguish via on-chain deadlines so Retry doesn't loop sign → revert →
+  // sign forever. Zeroed deadlines mean no pending acknowledgement, not a closed window.
+  //
+  // Read above the signature review because `currentBlock` off this same call is what the
+  // review's 256-block staleness check needs — no extra chain read.
+  const { data: ackDeadlines } = useTxContractDeadlines(storedSignatureState?.reporter);
+  const hasNoPendingAck =
+    ackDeadlines !== undefined && ackDeadlines.start === 0n && ackDeadlines.expiry === 0n;
+  const windowClosed = ackDeadlines !== undefined && !hasNoPendingAck && ackDeadlines.isExpired;
+
+  const { review: signatureReview, isChecking: isReviewingSignature } = useRelayedTxSignatureReview(
+    {
+      enabled: isP2PRelayed && !!storedSignatureState,
+      step: TX_SIGNATURE_STEP.REGISTRATION,
+      storedSignature: storedSignatureState,
+      expectedSigner: storedSignatureState?.reporter, // logged only; gating uses pairedWallet
+      trustedForwarder: storedSignatureState?.trustedForwarder,
+      currentBlock: ackDeadlines?.currentBlock,
+    }
+  );
+
+  /**
+   * The registration signature commits to `blockhash(windowBlock)`, which the EVM only keeps
+   * for 256 blocks; past that the contract reverts with `TimingConfig__WindowBlockTooOld`.
+   * The P2P path gets this via `signatureReview` above; standard and self-relay have no
+   * review, so the same pre-flight is applied directly. On Base's 2s blocks the window is
+   * about 8.5 minutes, which a self-relay wallet switch can easily exceed.
+   */
+  const windowBlockStale =
+    !isP2PRelayed &&
+    isWindowBlockStale(storedSignatureState?.windowBlock, ackDeadlines?.currentBlock);
+  // Only blocks the P2P path; elsewhere there is nothing to verify against.
+  const isSignatureReviewBlocking = isP2PRelayed && !signatureReview?.ok;
+
+  // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
+  // has to mean "sign again", not "submit the same bytes again".
+  const needsResign = isError && isSignatureInvalidatingError(error);
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
@@ -173,6 +285,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     chainIds: chainIdsForContractGuarded,
     reporter: storedSignatureState?.reporter,
     deadline: storedSignatureState?.deadline,
+    // Hub registration commits to this block's hash; the estimate must use the signed value.
+    windowBlock: isHub ? storedSignatureState?.windowBlock : undefined,
     // Spoke-specific params
     reportedChainId: isSpoke ? reportedChainIdHash : undefined,
     nonce: isSpoke ? storedSignatureState?.nonce : undefined,
@@ -190,7 +304,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   // Uses the first tx hash from the batch as a sentinel for registration lookup
   const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
-  const crossChainConfirmation = useTxCrossChainConfirmation({
+  const crossChainConfirmation = useCrossChainConfirmation({
+    registry: 'transaction',
     sampleTxHash,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
@@ -219,25 +334,23 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
-    // Cross-chain states
+    // Cross-chain states — shared with RegistrationPayStep so the two cannot diverge again.
     if (isCrossChain && isConfirmed) {
-      if (crossChainConfirmation.status === 'confirmed') return 'hub-confirmed';
-      if (
-        crossChainConfirmation.status === 'polling' ||
-        crossChainConfirmation.status === 'waiting'
-      ) {
-        return 'relaying';
-      }
-      // timeout - show warning state, don't auto-advance
-      if (crossChainConfirmation.status === 'timeout') return 'hub-timeout';
+      const hubStatus = deriveCrossChainStatus(crossChainConfirmation.status);
+      if (hubStatus) return hubStatus;
     }
     // Local states
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
+    return deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
   };
+
+  useInvalidateRegistryOnConfirm('transaction-registration', hash, isConfirmed);
 
   // Build cross-chain progress data for UI
   // Include both 'relaying' and 'hub-timeout' so the explorer link stays visible during timeout
@@ -346,6 +459,16 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       isCorrectWallet,
     });
 
+    if (isSignatureReviewBlocking) {
+      logger.contract.warn('Blocked REG submission: relayed signature did not pass verification', {
+        issues: signatureReview?.issues,
+      });
+      setLocalError(
+        'The signature you received could not be verified. See the details above before paying.'
+      );
+      return;
+    }
+
     if (!storedSignatureState || !dataHash || !reportedChainIdHash) {
       logger.contract.error('Cannot submit transaction registration - missing data', {
         hasStoredSignature: !!storedSignatureState,
@@ -353,6 +476,16 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         reportedChainIdHash,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
+      return;
+    }
+
+    if (windowBlockStale) {
+      logger.contract.error('Cannot submit transaction registration - window block is too old', {
+        dataHash,
+        windowBlock: storedSignatureState.windowBlock?.toString(),
+        currentBlock: ackDeadlines?.currentBlock?.toString(),
+      });
+      setLocalError(describeWindowBlockStale());
       return;
     }
 
@@ -395,19 +528,32 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       // Build params based on chain type (hub vs spoke have different signatures)
       let params: TxRegistrationParams;
 
+      // Both hub and spoke registration signatures commit to blockhash(windowBlock); without
+      // the number the contract cannot recompute it, so there is nothing valid to submit.
+      if (storedSignatureState.windowBlock === undefined) {
+        logger.contract.error('Cannot submit transaction registration - missing windowBlock', {
+          dataHash,
+        });
+        setLocalError('Signature is missing required data. Please go back and sign again.');
+        return;
+      }
+
       if (isHub) {
-        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s) - payable
+        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, windowBlock,
+        //                           v, r, s) - payable
         const hubParams: TxRegistrationParamsHub = {
           reporter: storedSignatureState.reporter,
           deadline: storedSignatureState.deadline,
           transactionHashes: txHashesForContractGuarded,
           chainIds: chainIdsForContractGuarded,
+          windowBlock: storedSignatureState.windowBlock,
           signature: parsedSig,
           feeWei,
         };
         params = hubParams;
       } else {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        //                                 transactionHashes, chainIds, windowBlock, v, r, s)
         const spokeParams: TxRegistrationParamsSpoke = {
           reporter: storedSignatureState.reporter,
           reportedChainId: reportedChainIdHash,
@@ -415,6 +561,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           nonce: storedSignatureState.nonce,
           transactionHashes: txHashesForContractGuarded,
           chainIds: chainIdsForContractGuarded,
+          windowBlock: storedSignatureState.windowBlock,
           signature: parsedSig,
           feeWei,
         };
@@ -445,8 +592,112 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
    * Handle retry after failure.
    */
   const handleRetry = () => {
+    // Plain retry for anything a resubmit can fix. For a signature-invalidating revert the
+    // stored signature is discarded and the user is sent back to sign — retrying it would
+    // resubmit identical bytes forever.
+    if (needsResign) {
+      if (dataHash && formReporter) {
+        removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
+      }
+      reset();
+      setLocalError(null);
+
+      // P2P relay: the signature is the reporter's, on another machine, so discarding the
+      // local copy is only half the recovery — without a request over the wire the reporter
+      // waits forever on a "the relayer is submitting" screen. The relayer must also move
+      // back to the step where `isTxRelayerProtocolExpectedAtStep` admits the reply:
+      // `select-transactions` for a fresh TX_ACK_SIG, `register-sign` for a TX_REG_SIG.
+      if (isP2PRelayed) {
+        const action = classifyP2PRetry({ isError, error, windowClosed });
+        const restartFromAck = action.kind === 'request-resign' && action.discardAcknowledgement;
+
+        if (dataHash && formReporter && restartFromAck) {
+          removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        setStoredSignatureState(null);
+        setResignRequest({ notified: null, windowClosed: restartFromAck, ack: null });
+
+        logger.contract.warn(
+          restartFromAck
+            ? 'Transaction registration window closed on-chain; asking the reporter to restart from acknowledgement'
+            : 'Relayed transaction registration signature invalidated by revert; requesting a new one from the reporter',
+          { dataHash, windowClosed: restartFromAck, error: error?.message }
+        );
+
+        // Armed BEFORE the write: the reporter can answer before `passStreamData` resolves
+        // here, and an answer with nobody listening yet would be dropped and then waited on
+        // forever.
+        armResignAck();
+
+        void sendResignRequest({
+          getLibp2p: getLibp2p ?? (() => null),
+          partnerPeerId,
+          reason: restartFromAck ? 'window-closed' : 'signature-invalidated',
+          flow: 'transaction',
+        }).then(async (notified) => {
+          if (!notified) {
+            setResignRequest({ notified: false, windowClosed: restartFromAck, ack: null });
+            return;
+          }
+
+          // A resolved stream write is NOT consent — the rule `WaitForConnectionStep` states
+          // for CONNECT. The reporter refuses a request past `MAX_RESIGN_REQUESTS`, or one
+          // arriving at a step it cannot recover from; navigating on a refusal deadlocks both
+          // sides with no timeout and no control on either screen.
+          const ack = await waitForResignAck();
+          setResignRequest({ notified: true, windowClosed: restartFromAck, ack });
+          if (ack === 'accepted') {
+            setResignRequest(null);
+            setStep(restartFromAck ? 'select-transactions' : 'register-sign');
+          }
+        });
+        return;
+      }
+
+      // Window closed on-chain: a fresh registration signature reverts identically, so the
+      // flow must restart from acknowledgement. The old ACK signature's nonce is consumed,
+      // so it is discarded too.
+      if (windowClosed) {
+        logger.contract.warn(
+          'Transaction registration window closed on-chain, restarting from acknowledgement',
+          { dataHash, error: error?.message }
+        );
+        if (dataHash && formReporter) {
+          removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        setStep('acknowledge-sign');
+        return;
+      }
+
+      logger.contract.warn(
+        'Transaction registration signature invalidated by revert, returning to sign',
+        { dataHash, error: error?.message }
+      );
+      const previous = step ? getTxPreviousStep(registrationType, step) : null;
+      if (previous) setStep(previous);
+      return;
+    }
+
     reset();
     setLocalError(null);
+  };
+
+  /** Discard the aged-out signature and send the reporter back to sign a fresh one. */
+  const handleResignAfterStale = () => {
+    if (dataHash && formReporter) {
+      removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
+    }
+    logger.contract.warn(
+      'Transaction registration window block aged out of blockhash range; re-signing',
+      {
+        dataHash,
+        windowBlock: storedSignatureState?.windowBlock?.toString(),
+        currentBlock: ackDeadlines?.currentBlock?.toString(),
+      }
+    );
+    setStoredSignatureState(null);
+    const previous = step ? getTxPreviousStep(registrationType, step) : null;
+    if (previous) setStep(previous);
   };
 
   /**
@@ -473,27 +724,65 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     );
   }
 
+  // Signature discarded after an invalidating revert on the P2P path. This has to come
+  // before the "signature not found" branch below — the signature is legitimately gone, and
+  // the reader needs to know why and what their partner has to do, not that something is
+  // missing.
+  if (resignRequest) {
+    return (
+      <div className="space-y-4">
+        <SignatureInvalidatedAlert
+          windowClosed={resignRequest.windowClosed}
+          partner={{ notified: resignRequest.notified, role: 'reporter' }}
+        />
+        {resignRequest.ack === 'refused' && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Your partner declined to sign again. They may have hit the limit on re-sign requests,
+              or moved on. Contact them directly before continuing.
+            </AlertDescription>
+          </Alert>
+        )}
+        {resignRequest.ack === 'timeout' && (
+          <Alert>
+            <AlertDescription>
+              Your partner has not confirmed the request. It may still have reached them — check
+              with them directly before waiting for a new signature.
+            </AlertDescription>
+          </Alert>
+        )}
+        {(resignRequest.notified === false || resignRequest.ack !== null) &&
+          resignRequest.ack !== 'accepted' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setStep(resignRequest.windowClosed ? 'select-transactions' : 'register-sign')
+              }
+            >
+              I&apos;ve asked them — wait for a new signature
+            </Button>
+          )}
+      </div>
+    );
+  }
+
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={() => setStep('select-transactions')}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignatureState) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the registration again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={() => setStep('register-sign')}>
+        Signature not found. Go back and sign the registration again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -611,6 +900,39 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         />
       )}
 
+      {needsResign && (
+        <SignatureInvalidatedAlert
+          windowClosed={windowClosed}
+          partner={isP2PRelayed ? { notified: null, role: 'reporter' } : undefined}
+        />
+      )}
+
+      {windowBlockStale && !needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{describeWindowBlockStale()}</span>
+            <Button variant="outline" size="sm" onClick={handleResignAfterStale}>
+              Sign Again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* P2P relay: review before you pay */}
+      {isP2PRelayed && storedSignatureState && (
+        <RelayedSignatureReview
+          review={signatureReview}
+          isChecking={isReviewingSignature}
+          // The out-of-band wallet, never `.reporter` — that is the peer's own claim, so a
+          // panel built from it shows "Signed by: X / You were told: X" for an attacker who
+          // signed over its own address, i.e. two matching rows next to a signer-mismatch
+          // alert. Gating already used `pairedWallet`; the display now agrees with it.
+          expectedSigner={pairedWallet}
+          deadline={storedSignatureState.deadline}
+        />
+      )}
+
       {/* Transaction card with cost breakdown */}
       <TransactionCard
         type="registration"
@@ -686,7 +1008,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         onContinueAnyway={handleContinueAnyway}
-        disabled={!isCorrectWallet}
+        disabled={!isCorrectWallet || isSignatureReviewBlocking || windowBlockStale}
       />
 
       {/* Disabled state message when wrong wallet connected */}

@@ -1,11 +1,13 @@
 /**
- * Hook to read deadline and hash struct from the transaction registry contract.
+ * Hook to read the signing deadline from the transaction registry contract.
  * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
  *
- * Both contracts expose `generateTransactionHashStruct` with the same signature:
+ * Both contracts expose `getTransactionSignatureDeadline` with the same signature:
  *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address trustedForwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
+ * The contract returns ONLY a deadline — see {useGenerateHashStruct} for why there is no
+ * hash-struct return value.
  */
 
 import { useEffect, useMemo } from 'react';
@@ -19,7 +21,6 @@ import { logger } from '@/lib/logger';
 
 export interface TxHashStructData {
   deadline: bigint;
-  hashStruct: Hash;
 }
 
 /** Result type for refetch operations */
@@ -38,11 +39,7 @@ export interface UseTxHashStructResult {
 
 /** Transform raw contract result to typed format */
 function transformResult(raw: unknown): TxHashStructData | undefined {
-  if (raw && Array.isArray(raw) && raw.length >= 2) {
-    const [deadline, hashStruct] = raw as [bigint, Hash];
-    return { deadline, hashStruct };
-  }
-  return undefined;
+  return typeof raw === 'bigint' ? { deadline: raw } : undefined;
 }
 
 /**
@@ -53,7 +50,7 @@ function transformResult(raw: unknown): TxHashStructData | undefined {
  * @param transactionCount - Number of transactions in the batch
  * @param forwarderAddress - The trusted forwarder address (who can submit the tx)
  * @param step - The signature step (1 = Acknowledgement, 2 = Registration)
- * @returns The deadline and hash struct for the EIP-712 message
+ * @returns The deadline for the EIP-712 message
  */
 export function useTransactionHashStruct(
   dataHash: Hash | undefined,
@@ -92,12 +89,12 @@ export function useTransactionHashStruct(
     !!forwarderAddress &&
     !!contractAddress;
 
-  // Hub chain: TransactionRegistry.generateTransactionHashStruct
+  // Hub chain: TransactionRegistry.getTransactionSignatureDeadline
   const hubResult = useReadContract({
     address: contractAddress,
     abi: transactionRegistryAbi,
     chainId,
-    functionName: 'generateTransactionHashStruct',
+    functionName: 'getTransactionSignatureDeadline',
     args: enabled
       ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
       : undefined,
@@ -107,12 +104,12 @@ export function useTransactionHashStruct(
     },
   });
 
-  // Spoke chain: SpokeRegistry.generateTransactionHashStruct (same signature)
+  // Spoke chain: SpokeRegistry.getTransactionSignatureDeadline (same signature)
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'generateTransactionHashStruct',
+    functionName: 'getTransactionSignatureDeadline',
     args: enabled
       ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
       : undefined,
@@ -129,7 +126,7 @@ export function useTransactionHashStruct(
   // Log in useEffect to avoid render-time side effects
   useEffect(() => {
     if (result.isError) {
-      logger.contract.error('generateTransactionHashStruct call failed', {
+      logger.contract.error('getTransactionSignatureDeadline call failed', {
         chainId,
         contractAddress,
         isSpoke,
@@ -154,7 +151,7 @@ export function useTransactionHashStruct(
 
   useEffect(() => {
     if (transformedData) {
-      logger.contract.debug('generateTransactionHashStruct call succeeded', {
+      logger.contract.debug('getTransactionSignatureDeadline call succeeded', {
         chainId,
         contractAddress,
         isSpoke,

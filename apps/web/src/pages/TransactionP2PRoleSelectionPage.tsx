@@ -4,10 +4,11 @@
  * Users choose whether they are the reporter (wallet owner) or relayer (gas payer).
  */
 
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
 import { ArrowLeft, FileWarning, HandHelping } from 'lucide-react';
+
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 
@@ -21,7 +22,7 @@ interface RoleCardProps {
 
 function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
   return (
-    <Card className="transition-all hover:border-primary hover:shadow-md">
+    <Card className="transition-[border-color,box-shadow] hover:border-primary hover:shadow-md">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>
         <CardTitle>{title}</CardTitle>
@@ -29,8 +30,8 @@ function RoleCard({ title, description, icon, details, onClick }: RoleCardProps)
       </CardHeader>
       <CardContent>
         <ul className="space-y-2 text-sm text-muted-foreground">
-          {details.map((detail, i) => (
-            <li key={i} className="flex items-start gap-2">
+          {details.map((detail) => (
+            <li key={detail} className="flex items-start gap-2">
               <span className="text-primary">•</span>
               {detail}
             </li>
@@ -46,14 +47,10 @@ function RoleCard({ title, description, icon, details, onClick }: RoleCardProps)
 
 export function TransactionP2PRoleSelectionPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) setLocation('/');
-  }, [isConnected, setLocation]);
-
-  if (!isConnected) return null;
+  if (!isReady) return null;
 
   const handleBack = () => {
     setLocation('/register/transactions');

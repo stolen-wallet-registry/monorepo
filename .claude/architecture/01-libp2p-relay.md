@@ -254,11 +254,15 @@ REGISTEREE                              RELAYER
 - `initialize()`, `connect(remotePeerId)`, `disconnect()`, `send()`
 - Manages libp2p node lifecycle
 
-**`useP2PSignatureRelay`** - Higher-level relay hook:
+**`useP2PSignFlow`** (registeree side) - Refetches nonce/deadline, signs, sends over the stream.
 
-- `sendAckSignature()`, `sendRegSignature()`
-- `sendAckTxHash()`, `sendRegTxHash()`
-- Role-based handlers (registeree vs relayer)
+**`useRelayedSignatureReview`** (relayer side) - Recovers the signer from a received signature
+and gates payment on it matching the paired wallet (see `lib/signatures/relayVerification.ts`).
+
+There is no single "signature relay" hook any more — the old `useP2PSignatureRelay` was
+dissolved into the four P2P pages plus `lib/p2p/signatureData.ts` (inbound validation) and
+`processRelayedSignature.ts`. Protocol handlers are registered per-page; the step gate for
+which protocol is admissible when lives in `lib/p2p/protocolSteps.ts`.
 
 ---
 
@@ -267,14 +271,21 @@ REGISTEREE                              RELAYER
 ```text
 apps/web/src/
 ├── lib/p2p/
-│   ├── libp2p.ts       # Node setup, connections, streams
-│   └── types.ts        # Zod schemas, interfaces
+│   ├── libp2p.ts         # Node setup, connections, streams
+│   ├── peerGuard.ts      # Peer authorization + per-protocol schema validation
+│   ├── protocolSteps.ts  # Which protocol is admissible at which flow step
+│   ├── signatureData.ts  # Inbound signature payload validation
+│   ├── resignAck.ts      # RESIGN_REQ/RESIGN_ACK exchange
+│   └── types.ts          # Zod schemas, interfaces
 ├── hooks/
-│   ├── useP2PConnection.ts
-│   ├── useP2PSignatureRelay.ts
-│   └── useP2PKeepAlive.ts
+│   ├── useP2PSignFlow.ts # Registeree: refetch-fresh, sign, send
+│   └── p2p/
+│       ├── useP2PConnectionHealth.ts
+│       ├── useP2PKeepAlive.ts
+│       └── useRelayedSignatureReview.ts  # Relayer: verify before paying
 └── stores/
-    └── p2pStore.ts     # Connection state
+    └── p2pStore.ts       # Connection state
 packages/p2p/src/
-└── protocols.ts        # Protocol constants
+├── protocols.ts          # Protocol constants (incl. RESIGN_REQ/RESIGN_ACK)
+└── types.ts              # PROTOCOL_SCHEMAS — single schema registry
 ```

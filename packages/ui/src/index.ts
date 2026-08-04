@@ -14,7 +14,8 @@ export {
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
 export { Badge } from './components/badge';
 export { badgeVariants } from './components/badge-variants';
-export { Button, buttonVariants } from './components/button';
+export { Button } from './components/button';
+export { buttonVariants } from './components/button-variants';
 export {
   Card,
   CardHeader,

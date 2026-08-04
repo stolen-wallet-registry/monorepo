@@ -2,71 +2,123 @@
  * Result interpretation utilities for registry search.
  */
 
+import { registryKindLabel } from './errors';
 import type {
   SearchResult,
   WalletSearchResult,
   TransactionSearchResult,
   AddressSearchResult,
   ResultStatus,
+  UnverifiedRegistries,
 } from './types';
+
+/**
+ * Copy for the case where a registry did not answer.
+ *
+ * Worded to block the reading this whole mechanism exists to prevent: the user must not walk
+ * away thinking the identifier was checked and came back clean.
+ */
+function unverifiedDescription(unverified: UnverifiedRegistries): string {
+  const names = unverified.map(registryKindLabel).join(' and ');
+  const registryWord = unverified.length > 1 ? 'registries' : 'registry';
+  return `The ${names} ${registryWord} could not be checked, so this is NOT a clean result. Try again before relying on it.`;
+}
+
+/**
+ * Whether a result names any registry that did not answer.
+ *
+ * Read BEFORE narrowing on `found`, deliberately. The result types now make a negative result
+ * with a non-empty `unverified` unrepresentable, so on the `found: false` branch TypeScript
+ * knows this is always empty — but these helpers are also reachable from plain JS and from
+ * hand-built objects in tests and stories, and the failure direction is asymmetric: treating
+ * an unknown as `not-found` is the false clean this package exists to prevent, while treating
+ * a genuine not-found as unknown merely tells someone to search again.
+ */
+function hasUnverified(result: { unverified: UnverifiedRegistries }): boolean {
+  return result.unverified.length > 0;
+}
 
 /**
  * Get simplified status from a wallet search result.
  *
  * @param result - Wallet search result
- * @returns 'registered' | 'not-found'
+ * @returns 'registered' | 'unverified' | 'not-found'
  */
 export function getWalletStatus(result: WalletSearchResult): ResultStatus {
-  return result.found ? 'registered' : 'not-found';
+  const unverified = hasUnverified(result);
+  if (result.found) return 'registered';
+  return unverified ? 'unverified' : 'not-found';
 }
 
 /**
  * Get simplified status from a transaction search result.
  *
  * @param result - Transaction search result
- * @returns 'registered' | 'not-found'
+ * @returns 'registered' | 'unverified' | 'not-found'
  */
 export function getTransactionStatus(result: TransactionSearchResult): ResultStatus {
-  return result.found ? 'registered' : 'not-found';
+  const unverified = hasUnverified(result);
+  if (result.found) return 'registered';
+  return unverified ? 'unverified' : 'not-found';
 }
 
 /**
  * Get simplified status from an address search result.
  *
  * @param result - Address search result (combined wallet + contract)
- * @returns 'registered' | 'not-found'
+ * @returns 'registered' | 'unverified' | 'not-found'
  */
 export function getAddressStatus(result: AddressSearchResult): ResultStatus {
-  return result.found ? 'registered' : 'not-found';
+  // A registry that never answered cannot contribute a "not in the registry" conclusion.
+  const unverified = hasUnverified(result);
+  if (result.found) return 'registered';
+  return unverified ? 'unverified' : 'not-found';
 }
 
 /**
  * Get simplified status from any search result.
  *
- * @param result - Search result (wallet, transaction, or invalid)
- * @returns 'registered' | 'not-found'
+ * @param result - Search result (address, transaction, or invalid)
+ * @returns 'registered' | 'unverified' | 'not-found'
  */
 export function getResultStatus(result: SearchResult): ResultStatus {
   if (result.type === 'invalid') return 'not-found';
-  return result.found ? 'registered' : 'not-found';
+  const unverified = hasUnverified(result);
+  if (result.found) return 'registered';
+  return unverified ? 'unverified' : 'not-found';
 }
 
 /**
  * Get human-readable label for wallet status.
  */
 export function getWalletStatusLabel(result: WalletSearchResult): string {
-  return result.found ? 'Stolen Wallet' : 'Not Found';
+  const unverified = hasUnverified(result);
+  if (result.found) return 'Stolen Wallet';
+  return unverified ? 'Could Not Verify' : 'Not Found';
 }
 
 /**
  * Get human-readable label for transaction status.
  */
 export function getTransactionStatusLabel(result: TransactionSearchResult): string {
-  if (!result.found) return 'Not Found';
+  const unverified = hasUnverified(result);
+  if (!result.found) {
+    return unverified ? 'Could Not Verify' : 'Not Found';
+  }
   const chainCount = result.data?.chains.length ?? 0;
-  return chainCount === 1
+  return chainCount === 1 && !result.data?.chainsTruncated
     ? 'Reported as Fraudulent'
-    : `Reported as Fraudulent (${chainCount} chains)`;
+    : `Reported as Fraudulent (${formatChainCount(chainCount, result.data?.chainsTruncated)} chains)`;
+}
+
+/**
+ * Render a per-chain report count, marking it as a floor when the list was truncated.
+ *
+ * The count comes from `chains.length`, which is only the whole story when the search drained
+ * the cursor. When it did not, "10" reads as complete; "10+" reads as what it is.
+ */
+function formatChainCount(count: number, truncated: boolean | undefined): string {
+  return truncated === true ? `${count}+` : String(count);
 }
 
 /**
@@ -74,7 +126,10 @@ export function getTransactionStatusLabel(result: TransactionSearchResult): stri
  * Shows which registry(ies) the address was found in.
  */
 export function getAddressStatusLabel(result: AddressSearchResult): string {
-  if (!result.found) return 'Not Found';
+  const unverified = hasUnverified(result);
+  if (!result.found) {
+    return unverified ? 'Could Not Verify' : 'Not Found';
+  }
 
   const labels: string[] = [];
 
@@ -107,8 +162,11 @@ export function getStatusLabel(result: SearchResult): string {
  * Get description for wallet status.
  */
 export function getWalletStatusDescription(result: WalletSearchResult): string {
+  const unverified: UnverifiedRegistries = result.unverified;
   if (!result.found) {
-    return 'This wallet is not in the registry.';
+    return unverified.length > 0
+      ? unverifiedDescription(unverified)
+      : 'This wallet is not in the registry.';
   }
   if (result.data?.isSponsored) {
     return 'This wallet has been registered as stolen (sponsored registration).';
@@ -120,13 +178,17 @@ export function getWalletStatusDescription(result: WalletSearchResult): string {
  * Get description for transaction status.
  */
 export function getTransactionStatusDescription(result: TransactionSearchResult): string {
+  const unverified: UnverifiedRegistries = result.unverified;
   if (!result.found) {
-    return 'This transaction is not in the registry.';
+    return unverified.length > 0
+      ? unverifiedDescription(unverified)
+      : 'This transaction is not in the registry.';
   }
   const chainCount = result.data?.chains.length ?? 0;
-  return chainCount === 1
+  const truncated = result.data?.chainsTruncated;
+  return chainCount === 1 && !truncated
     ? 'This transaction has been reported as fraudulent.'
-    : `This transaction has been reported as fraudulent on ${chainCount} chain${chainCount > 1 ? 's' : ''}.`;
+    : `This transaction has been reported as fraudulent on ${formatChainCount(chainCount, truncated)} chain${chainCount > 1 || truncated ? 's' : ''}.`;
 }
 
 /**
@@ -134,11 +196,19 @@ export function getTransactionStatusDescription(result: TransactionSearchResult)
  * Describes findings from both wallet and contract registries.
  */
 export function getAddressStatusDescription(result: AddressSearchResult): string {
+  const unverified: UnverifiedRegistries = result.unverified;
   if (!result.found) {
-    return 'This address is not in any registry.';
+    return unverified.length > 0
+      ? unverifiedDescription(unverified)
+      : 'This address is not in any registry.';
   }
 
   const descriptions: string[] = [];
+
+  // State the gap first: a hit in one registry must not imply the other was checked.
+  if (unverified.length > 0) {
+    descriptions.push(unverifiedDescription(unverified));
+  }
 
   if (result.foundInWalletRegistry) {
     const walletData = result.data?.wallet;
@@ -152,10 +222,13 @@ export function getAddressStatusDescription(result: AddressSearchResult): string
   if (result.foundInContractRegistry) {
     const contractData = result.data?.contract;
     const chainCount = contractData?.chains.length ?? 0;
-    if (chainCount === 1) {
+    const truncated = contractData?.chainsTruncated;
+    if (chainCount === 1 && !truncated) {
       descriptions.push('Flagged as a fraudulent contract.');
     } else {
-      descriptions.push(`Flagged as a fraudulent contract on ${chainCount} chains.`);
+      descriptions.push(
+        `Flagged as a fraudulent contract on ${formatChainCount(chainCount, truncated)} chains.`
+      );
     }
   }
 

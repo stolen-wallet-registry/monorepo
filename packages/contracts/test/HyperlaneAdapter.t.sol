@@ -5,12 +5,12 @@ import { Test } from "forge-std/Test.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { IBridgeAdapter } from "../src/interfaces/IBridgeAdapter.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
-import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
+import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
+import { BatchLimits } from "../src/libraries/BatchLimits.sol";
 
 contract HyperlaneAdapterTest is Test {
     HyperlaneAdapter adapter;
     MockMailbox mailbox;
-    MockInterchainGasPaymaster gasPaymaster;
 
     address owner = address(0x1);
     address user = address(0x2);
@@ -20,14 +20,19 @@ contract HyperlaneAdapterTest is Test {
 
     function setUp() public {
         mailbox = new MockMailbox(LOCAL_DOMAIN);
-        gasPaymaster = new MockInterchainGasPaymaster();
 
         vm.prank(owner);
-        adapter = new HyperlaneAdapter(owner, address(mailbox), address(gasPaymaster));
+        adapter = new HyperlaneAdapter(owner, address(mailbox));
 
         // Configure supported domain
         vm.prank(owner);
         adapter.setDomainSupport(HUB_DOMAIN, true);
+
+        // The test contract and `user` stand in for the spoke contracts that dispatch through the adapter
+        vm.startPrank(owner);
+        adapter.setAuthorizedSender(address(this), true);
+        adapter.setAuthorizedSender(user, true);
+        vm.stopPrank();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -35,9 +40,10 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_Constructor_SetsImmutables() public view {
-        // Constructor should store mailbox, gas paymaster, and owner.
+        // Constructor should store mailbox and owner. There is no gas paymaster argument:
+        // from Hyperlane v3 the interchain gas payment is collected by the mailbox's own
+        // default post-dispatch hook during dispatch().
         assertEq(address(adapter.mailbox()), address(mailbox));
-        assertEq(address(adapter.gasPaymaster()), address(gasPaymaster));
         assertEq(adapter.owner(), owner);
     }
 
@@ -106,21 +112,22 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_QuoteMessage_Success() public view {
-        // quoteMessage should return the gas payment quote.
+        // A non-batch payload is one entry: base 200,000 + 1 x 35,000 per-entry, at 1 gwei.
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
 
-        // Default gas amount is 200,000, default gas price is 1 gwei
-        uint256 expected = 200_000 * 1 gwei;
+        uint256 expected = (200_000 + 35_000) * 1 gwei;
         assertEq(quote, expected);
     }
 
-    function test_QuoteMessage_CustomGasAmount() public {
-        // Custom gas amount should affect the quote.
+    function test_QuoteMessage_CustomGasAmounts() public {
+        // Per-domain overrides should replace both halves of the gas model. Both values sit
+        // inside the accepted band — see {MIN_PER_ENTRY_GAS}; 10_000 per entry was below the
+        // floor this suite now enforces.
         vm.prank(owner);
-        adapter.setGasAmount(HUB_DOMAIN, 500_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 500_000, 20_000);
 
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
-        assertEq(quote, 500_000 * 1 gwei);
+        assertEq(quote, (500_000 + 20_000) * 1 gwei);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -131,6 +138,57 @@ contract HyperlaneAdapterTest is Test {
         // sendMessage should revert for unsupported chains.
         vm.expectRevert(IBridgeAdapter.BridgeAdapter__UnsupportedChain.selector);
         adapter.sendMessage(999, bytes32(uint256(1)), "test");
+    }
+
+    /// @dev The adapter is the address the destination CrossChainInbox and SoulboundReceiver trust
+    ///      as the origin sender, because Hyperlane records the dispatcher rather than its caller.
+    ///      An unauthorized caller therefore must not be able to dispatch anything at all — otherwise
+    ///      any EOA could forge a payload the hub accepts as a legitimate spoke message and register
+    ///      an arbitrary wallet as stolen with no EIP-712 signature, grace period, or fee.
+    function test_SendMessage_UnauthorizedSender_Reverts() public {
+        address attacker = makeAddr("attacker");
+        vm.deal(attacker, 1 ether);
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+
+        vm.prank(attacker);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__UnauthorizedSender.selector);
+        adapter.sendMessage{ value: 1 ether }(HUB_DOMAIN, recipient, "forged payload");
+    }
+
+    /// @dev Authorization must be revocable, so a compromised spoke contract can be cut off.
+    function test_SendMessage_RevokedSender_Reverts() public {
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+
+        vm.prank(owner);
+        adapter.setAuthorizedSender(address(this), false);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__UnauthorizedSender.selector);
+        adapter.sendMessage{ value: 1 ether }(HUB_DOMAIN, recipient, "test");
+    }
+
+    function test_SetAuthorizedSender_OnlyOwner() public {
+        address attacker = makeAddr("attacker");
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
+        adapter.setAuthorizedSender(attacker, true);
+    }
+
+    function test_SetAuthorizedSender_RejectsZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__ZeroAddress.selector);
+        adapter.setAuthorizedSender(address(0), true);
+    }
+
+    function test_SetAuthorizedSender_EmitsEvent() public {
+        address spoke = makeAddr("spoke");
+
+        vm.expectEmit(true, false, false, true);
+        emit HyperlaneAdapter.AuthorizedSenderUpdated(spoke, true);
+
+        vm.prank(owner);
+        adapter.setAuthorizedSender(spoke, true);
+        assertTrue(adapter.authorizedSenders(spoke));
     }
 
     function test_SendMessage_InsufficientFee_Reverts() public {
@@ -184,26 +242,284 @@ contract HyperlaneAdapterTest is Test {
     // GAS AMOUNT CONFIGURATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_SetGasAmount_OnlyOwner() public {
-        // setGasAmount should be owner-only.
+    function test_SetGasAmounts_OnlyOwner() public {
+        // setGasAmounts should be owner-only.
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
-        adapter.setGasAmount(HUB_DOMAIN, 300_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 300_000, 20_000);
     }
 
-    function test_SetGasAmount_Success() public {
-        // setGasAmount should update state and emit event.
+    function test_SetGasAmounts_Success() public {
+        // setGasAmounts should update state and emit event.
         vm.expectEmit(true, false, false, true);
-        emit HyperlaneAdapter.GasAmountUpdated(HUB_DOMAIN, 300_000);
+        emit HyperlaneAdapter.GasAmountUpdated(HUB_DOMAIN, 300_000, 20_000);
 
         vm.prank(owner);
-        adapter.setGasAmount(HUB_DOMAIN, 300_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 300_000, 20_000);
 
-        assertEq(adapter.gasAmounts(HUB_DOMAIN), 300_000);
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 300_000);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 20_000);
     }
 
-    function test_DefaultGasAmount() public view {
-        // DEFAULT_GAS_AMOUNT should match expected constant.
-        assertEq(adapter.DEFAULT_GAS_AMOUNT(), 200_000);
+    function test_DefaultGasAmounts() public view {
+        assertEq(adapter.DEFAULT_BASE_GAS(), 200_000);
+        assertEq(adapter.DEFAULT_PER_ENTRY_GAS(), 35_000);
+    }
+
+    /// @notice A gas model that would make a maximum-size batch exceed MAX_GAS_LIMIT is rejected.
+    /// @dev Without this bound, a plausible perEntryGas bump (e.g. 40k after a destination
+    ///      gas-schedule change) would make every large batch revert on quoteMessage —
+    ///      including already-acknowledged batches whose reporters burned a nonce and cannot
+    ///      re-acknowledge until expiry. 40_000 × 800 + 200_000 = 32.2M > 30M.
+    ///
+    ///      The batch size is read from BatchLimits, the same constant _validateGasModel uses,
+    ///      rather than hardcoded: with a literal 800 here, raising the shared limit would make
+    ///      this test assert against a batch size the contract no longer enforces.
+    function test_SetGasAmounts_RejectsConfigThatBreaksMaxBatch() public {
+        uint256 maxBatch = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
+        // Any per-entry value that overflows the ceiling alongside the default base.
+        uint256 tooMuch = ((adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / maxBatch) + 1;
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, tooMuch);
+    }
+
+    /// @notice baseGas carries its own ceiling, independent of the combined check.
+    /// @dev The combined bound alone does NOT catch a huge base paired with a small per-entry cost:
+    ///      `setGasAmounts(d, 29_000_000, 1_000)` computes 29M + 1_000 × 800 = 29.8M, which is
+    ///      under MAX_GAS_LIMIT and used to validate cleanly. Every single-entry cross-chain
+    ///      registration would then buy ~29M of destination gas through the IGP — a fee-inflation
+    ///      lever on an owner-only setter with no timelock in front of it.
+    ///
+    ///      This asserts the ORIGINAL exploit config is now rejected. It is discriminating by
+    ///      construction: the combined check passes these numbers, so only MAX_BASE_GAS can be
+    ///      what rejects them.
+    function test_SetGasAmounts_RejectsInflatedBaseGasThatCombinedCheckMisses() public {
+        // Precondition: prove the combined check really would have let this through.
+        assertLe(
+            uint256(29_000_000) + 1000 * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE,
+            adapter.MAX_GAS_LIMIT(),
+            "precondition: the combined bound does not reject this config"
+        );
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 29_000_000, 1000);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+    }
+
+    /// @notice One wei of gas over MAX_BASE_GAS is rejected.
+    /// @dev Paired with the exact-value success below. perEntryGas is 0 here, so the effective
+    ///      per-entry falls back to DEFAULT_PER_ENTRY_GAS and the combined total is ~28.8M —
+    ///      comfortably under MAX_GAS_LIMIT. The combined check therefore cannot fire, which makes
+    ///      MAX_BASE_GAS provably the only bound under test.
+    function test_SetGasAmounts_RejectsBaseGasAboveMaxBaseGas() public {
+        uint256 overLimit = adapter.MAX_BASE_GAS() + 1;
+
+        // Precondition: the combined bound is not what rejects this.
+        assertLe(
+            overLimit + adapter.DEFAULT_PER_ENTRY_GAS() * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE,
+            adapter.MAX_GAS_LIMIT(),
+            "precondition: the combined bound does not reject this config"
+        );
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, overLimit, 0);
+    }
+
+    /// @notice Exactly MAX_BASE_GAS is accepted — the bound is `>`, not `>=`.
+    /// @dev The load-bearing half of the pair. Without it, a bound mistakenly written as `>=`
+    ///      (rejecting the documented maximum) would go unnoticed, and so would a check that
+    ///      rejected every non-zero baseGas outright. Adjacent to the rejection above, so an
+    ///      off-by-one in either direction breaks exactly one of the two.
+    function test_SetGasAmounts_AcceptsBaseGasAtExactlyMaxBaseGas() public {
+        uint256 atLimit = adapter.MAX_BASE_GAS();
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, atLimit, 0);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), atLimit, "the documented maximum must be usable");
+    }
+
+    /// @notice The bound validates the effective values: 0 means "use default", not "no gas".
+    /// @dev baseGas = 0 falls back to DEFAULT_BASE_GAS, so a perEntryGas at exactly the ceiling
+    ///      for a ZERO base must still be rejected once the default base is added back. A bound
+    ///      that validated the raw arguments instead of the effective ones would accept it.
+    function test_SetGasAmounts_ValidatesEffectiveDefaults() public {
+        uint256 maxBatch = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
+
+        // Exactly fills MAX_GAS_LIMIT with a zero base — and therefore overflows it once the
+        // default base is applied.
+        uint256 fitsOnlyWithoutBase = adapter.MAX_GAS_LIMIT() / maxBatch;
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, fitsOnlyWithoutBase);
+
+        // The largest per-entry value that fits alongside the default base is accepted.
+        uint256 maxPerEntry = (adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / maxBatch;
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, maxPerEntry);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), maxPerEntry);
+    }
+
+    /// @notice The gas model is bounded BELOW as well as above.
+    /// @dev SECURITY (C-4). The ceilings stop an owner overcharging; the floors stop the more
+    ///      damaging direction. `setGasAmounts(d, 1, 1)` is a silent kill switch: the quote
+    ///      collapses, the spoke accepts the cheap fee, burns the nonce, deletes the
+    ///      acknowledgement and dispatches \u2014 and the relayer then declines to execute a message
+    ///      it was not paid for. No revert reaches the user, no refund, no on-chain trace of why.
+    ///      Both terms are checked because under-setting either one alone is sufficient.
+    function test_SetGasAmounts_RejectsValuesBelowFloor() public {
+        // Read the bounds BEFORE arming expectRevert: it applies to the next external call,
+        // which would otherwise be the `MIN_*` view rather than setGasAmounts.
+        uint256 justUnderBase = adapter.MIN_BASE_GAS() - 1;
+        uint256 justUnderPerEntry = adapter.MIN_PER_ENTRY_GAS() - 1;
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 1, 1);
+
+        // Base alone below its floor, per-entry left at the default.
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, justUnderBase, 0);
+
+        // Per-entry alone below its floor, base left at the default.
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, justUnderPerEntry);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+    }
+
+    /// @notice Exactly the floor is accepted \u2014 the bound is `<`, not `<=`.
+    /// @dev The load-bearing half of the pair above: without it, a floor written one step too
+    ///      strict would reject the documented minimum and nothing would notice.
+    function test_SetGasAmounts_AcceptsValuesAtExactlyFloor() public {
+        uint256 minBase = adapter.MIN_BASE_GAS();
+        uint256 minPerEntry = adapter.MIN_PER_ENTRY_GAS();
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, minBase, minPerEntry);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), minBase);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), minPerEntry);
+    }
+
+    /// @notice Explicit 0 still means "use the default" and is never treated as below the floor.
+    /// @dev A floor applied to the RAW arguments rather than the effective ones would reject
+    ///      `setGasAmounts(d, 0, 0)` \u2014 the documented way to clear a per-domain override.
+    function test_SetGasAmounts_ZeroClearsOverrideDespiteFloor() public {
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 400_000, 30_000);
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, 0);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "override must be clearable");
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 0, "override must be clearable");
+    }
+
+    // \u2550\u2550\u2550 PAYLOAD-AWARE GAS QUOTING \u2550\u2550\u2550
+
+    /// @dev Builds a transaction-batch payload with `count` entries, matching the encoding
+    ///      SpokeRegistry produces via CrossChainMessage.encodeTransactionBatch.
+    function _batchPayload(uint32 count) internal pure returns (bytes memory) {
+        bytes32[] memory hashes = new bytes32[](count);
+        bytes32[] memory chainIds = new bytes32[](count);
+        for (uint256 i = 0; i < count; i++) {
+            hashes[i] = bytes32(uint256(i + 1));
+            chainIds[i] = keccak256("eip155:8453");
+        }
+        return CrossChainMessage.encodeTransactionBatch(
+            CrossChainMessage.TransactionBatchPayload({
+                dataHash: keccak256("data"),
+                reporter: address(0xBEEF),
+                reportedChainId: keccak256("eip155:8453"),
+                sourceChainId: keccak256("eip155:10"),
+                transactionCount: count,
+                isSponsored: false,
+                nonce: 1,
+                timestamp: 1_700_000_000,
+                transactionHashes: hashes,
+                chainIds: chainIds
+            })
+        );
+    }
+
+    /// @dev The core of the under-funding bug: destination execution cost scales linearly with
+    ///      entry count, so a quote that ignores the payload strands every large batch on the
+    ///      spoke with the fee already spent. entryCount must read the real batch size.
+    function test_EntryCount_ReadsTransactionBatchSize() public view {
+        assertEq(adapter.entryCount(_batchPayload(1)), 1);
+        assertEq(adapter.entryCount(_batchPayload(50)), 50);
+        assertEq(adapter.entryCount(_batchPayload(800)), 800);
+    }
+
+    /// @dev Unknown or truncated payloads must degrade to a single entry rather than reverting
+    ///      the send, so a future message type cannot brick the bridge.
+    function test_EntryCount_UnknownPayloadDefaultsToOne() public view {
+        assertEq(adapter.entryCount("test"), 1);
+        assertEq(adapter.entryCount(""), 1);
+        assertEq(adapter.entryCount(hex"deadbeef"), 1);
+    }
+
+    function test_QuoteMessage_ScalesWithBatchSize() public view {
+        uint256 one = adapter.quoteMessage(HUB_DOMAIN, _batchPayload(1));
+        uint256 fifty = adapter.quoteMessage(HUB_DOMAIN, _batchPayload(50));
+
+        assertEq(one, (200_000 + 35_000) * 1 gwei);
+        assertEq(fifty, (200_000 + 50 * 35_000) * 1 gwei);
+        assertGt(fifty, one);
+    }
+
+    /// @dev quoteMessage and sendMessage must derive the identical gas limit, or a caller that
+    ///      quotes and then sends the quoted amount in the same transaction reverts.
+    function test_SendMessage_UsesQuotedGasLimit() public {
+        bytes memory payload = _batchPayload(50);
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+        uint256 fee = adapter.quoteMessage(HUB_DOMAIN, payload);
+
+        vm.deal(user, fee);
+        vm.prank(user);
+        adapter.sendMessage{ value: fee }(HUB_DOMAIN, recipient, payload);
+
+        assertEq(mailbox.lastGasLimit(), 200_000 + 50 * 35_000);
+        assertEq(mailbox.lastValue(), fee);
+    }
+
+    /// @dev Overwrites the declared transactionCount without resizing the arrays, simulating a
+    ///      payload that lies about its size. Cheaper than actually encoding millions of entries.
+    function _withDeclaredCount(bytes memory payload, uint256 declared) internal pure returns (bytes memory) {
+        // transactionCount occupies bytes [192:224] of the ABI head.
+        assembly {
+            mstore(add(payload, add(0x20, 192)), declared)
+        }
+        return payload;
+    }
+
+    /// @dev A payload claiming an absurd entry count must fail with a diagnosable error at quote
+    ///      time rather than reverting on arithmetic overflow or quoting a nonsense fee.
+    function test_GasLimitExceeded_Reverts() public {
+        bytes memory payload = _withDeclaredCount(_batchPayload(1), 1_000_000);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasLimitExceeded.selector);
+        adapter.quoteMessage(HUB_DOMAIN, payload);
+    }
+
+    /// @dev The same guard must hold against an overflow-sized count, not just a large one.
+    function test_GasLimitExceeded_OverflowCount_Reverts() public {
+        bytes memory payload = _withDeclaredCount(_batchPayload(1), type(uint256).max);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasLimitExceeded.selector);
+        adapter.quoteMessage(HUB_DOMAIN, payload);
+    }
+
+    function test_GasLimitFor_MatchesModel() public view {
+        assertEq(adapter.gasLimitFor(HUB_DOMAIN, _batchPayload(10)), 200_000 + 10 * 35_000);
     }
 }

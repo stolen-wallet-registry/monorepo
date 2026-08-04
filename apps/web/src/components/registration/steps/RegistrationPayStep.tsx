@@ -7,9 +7,11 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 
-import { Alert, AlertDescription } from '@swr/ui';
+import { Alert, AlertDescription, Button } from '@swr/ui';
 import {
   TransactionCard,
+  deriveTransactionStatus,
+  deriveCrossChainStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -24,12 +26,25 @@ import {
   useCrossChainConfirmation,
   needsCrossChainConfirmation,
 } from '@/hooks/useCrossChainConfirmation';
-import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import {
+  getSignature,
+  removeSignature,
+  parseSignature,
+  isWindowBlockStale,
+  describeWindowBlockStale,
+  SIGNATURE_STEP,
+} from '@/lib/signatures';
+import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -77,13 +92,23 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Get stored signature
-  const storedSignature = registeree
-    ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION)
-    : null;
+  // Some reverts invalidate the signature itself (expired deadline, consumed nonce, expired
+  // forwarder). Retrying those rebuilds the SAME transaction from the SAME cached signature
+  // and reverts identically — the user could press Retry forever with no way to re-sign. Those
+  // are routed to a re-sign instead of a resubmit.
+  const { goToPreviousStep, goToStep, resetFlow } = useStepNavigation();
+  const needsResign = isError && isSignatureInvalidatingError(error);
 
-  // Parse signature once for reuse (avoid calling parseSignature 4 times)
-  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+  // The contract reuses DeadlineExpired for two distinct failures: a stale signature
+  // timestamp (fixable by re-signing) and a registration window that closed on-chain
+  // (block.number past the acknowledgement's expiry — no new signature can fix it).
+  // Without checking the on-chain deadlines, "Retry → re-sign" loops sign → revert → sign
+  // forever once the window is closed. Zeroed deadlines mean no pending acknowledgement
+  // (the contract reports isExpired for those too), so they don't count as closed.
+  const { data: deadlines } = useContractDeadlines(registeree ?? undefined);
+  const hasNoPendingAck =
+    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
 
   // Determine forwarder based on registration type:
   // - Standard: registeree pays and forwards (registeree == forwarder)
@@ -92,8 +117,48 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // - Future meta-tx: trusted 3rd party would be set as relayer
   const forwarder = isSelfRelay ? relayer : registeree;
 
+  // Get stored signature, bound to the forwarder it was signed over. If the user went back
+  // and edited the gas wallet after signing, the cached signature no longer matches the
+  // struct the contract will verify, so it is treated as absent and the user is sent back to
+  // sign rather than being shown an opaque on-chain revert.
+  const storedSignature =
+    registeree && forwarder
+      ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION, forwarder)
+      : null;
+
+  /**
+   * The registration signature commits to `blockhash(windowBlock)`, and the EVM only keeps
+   * 256 blocks of history — past that the contract reverts with
+   * `TimingConfig__WindowBlockTooOld`. This is the same pre-flight the relayed path applies in
+   * `reviewRelayedSignature`; it belongs here too, because a self-relay user who signs, then
+   * switches wallets, then funds the gas wallet can easily spend more than 256 blocks (about
+   * 8.5 minutes on Base) getting to this button. `currentBlock` comes off the `getDeadlines`
+   * read already on screen, so it costs nothing extra.
+   */
+  const windowBlockStale = isWindowBlockStale(
+    storedSignature?.windowBlock,
+    deadlines?.currentBlock
+  );
+
+  /** Discard the dead signature and send the user back to sign a fresh one. */
+  const handleResignAfterStale = () => {
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
+    logger.registration.warn('Registration window block aged out of blockhash range; re-signing', {
+      registeree,
+      windowBlock: storedSignature?.windowBlock?.toString(),
+      currentBlock: deadlines?.currentBlock?.toString(),
+    });
+    goToPreviousStep();
+  };
+
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+
   // Build transaction args for gas estimation (needs to be before early returns)
-  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce,
+  //                   windowBlock, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature &&
     registeree &&
@@ -101,7 +166,8 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     parsedSig &&
     storedSignature.reportedChainId !== undefined &&
     storedSignature.incidentTimestamp !== undefined &&
-    storedSignature.nonce !== undefined
+    storedSignature.nonce !== undefined &&
+    storedSignature.windowBlock !== undefined
       ? ([
           registeree,
           forwarder,
@@ -109,6 +175,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           storedSignature.incidentTimestamp,
           storedSignature.deadline,
           storedSignature.nonce,
+          storedSignature.windowBlock,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
@@ -128,6 +195,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   const crossChainConfirmation = useCrossChainConfirmation({
+    registry: 'wallet',
     wallet: registeree ?? undefined,
     spokeChainId: chainId,
     enabled: isCrossChain && isConfirmed && !!registeree,
@@ -153,31 +221,33 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     void extractMessage();
   }, [isCrossChain, receipt, setBridgeMessageId]);
 
+  useInvalidateRegistryOnConfirm('registration', hash, isConfirmed);
+
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
-    // Cross-chain states
+    // Cross-chain states — shared with TxRegisterPayStep so the two cannot diverge again.
     if (isCrossChain && isConfirmed) {
-      if (crossChainConfirmation.status === 'confirmed') return 'hub-confirmed';
-      if (
-        crossChainConfirmation.status === 'polling' ||
-        crossChainConfirmation.status === 'waiting'
-      ) {
-        return 'relaying';
-      }
-      // timeout or error - show as confirmed locally (user can check later)
-      if (crossChainConfirmation.status === 'timeout') return 'confirmed';
+      const hubStatus = deriveCrossChainStatus(crossChainConfirmation.status);
+      if (hubStatus) return hubStatus;
     }
     // Local states
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
+    return deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
   };
 
-  // Build cross-chain progress data for UI
+  // Build cross-chain progress data for UI.
+  // Includes 'hub-timeout' as well as 'relaying' so the bridge explorer link stays visible
+  // after the timeout — that link is the only way a user can check whether the message
+  // eventually landed on the hub.
+  const currentStatus = getStatus();
   const crossChainProgress: CrossChainProgress | undefined =
-    isCrossChain && getStatus() === 'relaying'
+    isCrossChain && (currentStatus === 'relaying' || currentStatus === 'hub-timeout')
       ? {
           elapsedTime: crossChainConfirmation.elapsedTime,
           hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
@@ -210,15 +280,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         return () => clearTimeout(timerId);
       }
 
-      // Handle timeout - still show as complete (user can verify later)
+      // Handle timeout - show the pending-confirmation state, do NOT auto-advance.
+      // Advancing here would drop the user on a success screen for a registration the hub
+      // never confirmed. They must acknowledge it via "Continue Anyway".
       if (crossChainConfirmation.status === 'timeout') {
         logger.registration.warn('Cross-chain confirmation timed out', {
           registeree,
           transactionHash: hash,
           elapsedTime: crossChainConfirmation.elapsedTime,
         });
-        const timerId = window.setTimeout(onComplete, 1500);
-        return () => clearTimeout(timerId);
+        return;
       }
 
       return; // Still waiting for hub confirmation
@@ -283,14 +354,27 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     if (
       storedSignature.reportedChainId === undefined ||
       storedSignature.incidentTimestamp === undefined ||
-      storedSignature.nonce === undefined
+      storedSignature.nonce === undefined ||
+      // Signed over blockhash(windowBlock); without the number the contract cannot recompute it.
+      storedSignature.windowBlock === undefined
     ) {
       logger.contract.error('Cannot submit registration - missing required fields', {
         hasReportedChainId: storedSignature.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
         hasNonce: storedSignature.nonce !== undefined,
+        hasWindowBlock: storedSignature.windowBlock !== undefined,
       });
       setLocalError('Signature is missing required data. Please go back and sign again.');
+      return;
+    }
+
+    if (windowBlockStale) {
+      logger.contract.error('Cannot submit registration - committed window block is too old', {
+        registeree,
+        windowBlock: storedSignature.windowBlock?.toString(),
+        currentBlock: deadlines?.currentBlock?.toString(),
+      });
+      setLocalError(describeWindowBlockStale());
       return;
     }
 
@@ -326,6 +410,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         incidentTimestamp,
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
+        windowBlock: storedSignature.windowBlock,
         signature: parsedSig,
         feeWei,
       });
@@ -348,10 +433,60 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
   /**
    * Handle retry after failure.
+   *
+   * Plain retry for anything a resubmit can fix (gas, RPC, nonce-of-the-EOA). For a
+   * signature-invalidating revert, the stored signature is discarded and the user is sent
+   * back to the sign step — otherwise the same bytes get resubmitted forever.
    */
   const handleRetry = () => {
+    if (needsResign) {
+      if (registeree) {
+        removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+      }
+      reset();
+      setLocalError(null);
+
+      // Window closed on-chain: a fresh registration signature reverts identically, so the
+      // flow must restart from acknowledgement. The old ACK signature's nonce is consumed,
+      // so it is discarded too.
+      if (windowClosed) {
+        logger.registration.warn(
+          'Registration window closed on-chain, restarting from acknowledgement',
+          { registeree, error: error?.message }
+        );
+        if (registeree) {
+          removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        goToStep('acknowledge-and-sign');
+        return;
+      }
+
+      logger.registration.warn('Registration signature invalidated by revert, returning to sign', {
+        registeree,
+        error: error?.message,
+      });
+      goToPreviousStep();
+      return;
+    }
+
     reset();
     setLocalError(null);
+  };
+
+  /**
+   * Handle "Continue Anyway" after cross-chain timeout.
+   *
+   * The spoke transaction succeeded; only the hub acknowledgement is outstanding. The user has
+   * seen the bridge explorer link and is choosing to proceed, so this is an acknowledgement
+   * rather than a claim that the registration confirmed.
+   */
+  const handleContinueAnyway = () => {
+    logger.registration.info('User clicked Continue Anyway after cross-chain timeout', {
+      registeree,
+      transactionHash: hash,
+      elapsedTime: crossChainConfirmation.elapsedTime,
+    });
+    onComplete();
   };
 
   // Not connected
@@ -367,24 +502,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Missing form data
   if (!registeree || !expectedWallet) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignature) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the registration again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={goToPreviousStep}>
+        Signature not found. Go back and sign the registration again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -418,6 +547,20 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         />
       )}
 
+      {needsResign && <SignatureInvalidatedAlert windowClosed={windowClosed} />}
+
+      {windowBlockStale && !needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{describeWindowBlockStale()}</span>
+            <Button variant="outline" size="sm" onClick={handleResignAfterStale}>
+              Sign Again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Transaction card with integrated cost estimate */}
       <TransactionCard
         type="registration"
@@ -430,7 +573,8 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
-        disabled={!isCorrectWallet || !isFeeReady}
+        onContinueAnyway={currentStatus === 'hub-timeout' ? handleContinueAnyway : undefined}
+        disabled={!isCorrectWallet || !isFeeReady || windowBlockStale}
         crossChainProgress={crossChainProgress}
       />
 

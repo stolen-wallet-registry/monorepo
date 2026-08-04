@@ -7,22 +7,77 @@
  */
 
 import { Alert, AlertTitle, AlertDescription, Badge, Separator } from '@swr/ui';
-import { AlertCircle, CheckCircle2, FileWarning, Wallet } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, FileWarning, Wallet } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import type { AddressSearchData, WalletSearchData, ContractSearchData } from '@swr/search';
+import { registryKindLabel } from '@swr/search';
+import type {
+  AddressSearchData,
+  WalletSearchData,
+  ContractSearchData,
+  SearchUnavailableReason,
+  UnverifiedRegistries,
+} from '@swr/search';
 
-export interface AddressSearchResultProps {
-  /** Whether the address was found in any registry */
-  found: boolean;
-  /** Found in stolen wallet registry */
-  foundInWalletRegistry: boolean;
-  /** Found in fraudulent contract registry */
-  foundInContractRegistry: boolean;
-  /** Combined search data (null if not found in any registry) */
-  data: AddressSearchData | null;
+/** Props shared by both states of the card. */
+interface AddressSearchResultBaseProps {
+  /**
+   * Registries that could not be consulted.
+   *
+   * When non-empty, an absence of hits is NOT a clean result and must never render as one —
+   * a green "Clean" badge over an unreachable registry is how an off-ramp clears a wallet
+   * that is registered stolen.
+   */
+  unverified?: UnverifiedRegistries;
+  /**
+   * Why those registries could not be consulted. Only affects the guidance sentence on the
+   * "Could Not Verify" card.
+   *
+   * `'unreachable'` (the default) means the query was sent and failed, so retrying is the
+   * right advice. `'unsupported-identifier'` means the registry has no form for this
+   * identifier and nothing was ever queried — telling that user to "try again" sends them
+   * debugging an indexer that answered perfectly well.
+   */
+  reason?: SearchUnavailableReason;
   /** Additional class names */
   className?: string;
+}
+
+/**
+ * Props for the address result card.
+ *
+ * A discriminated union on `found`, mirroring `AddressSearchResult` in `@swr/search`, so the
+ * combination that caused finding UI-8 — `found: true` with `data: null` — cannot be passed
+ * at all. It used to slip through the `if (found && data)` guard, miss the amber branch when
+ * `unverified` was empty, and render the green "Not Found / Clean" card for an address that
+ * IS registered.
+ */
+export type AddressSearchResultProps = AddressSearchResultBaseProps &
+  (
+    | {
+        /** Found in at least one registry. */
+        found: true;
+        /** Found in stolen wallet registry */
+        foundInWalletRegistry: boolean;
+        /** Found in fraudulent contract registry */
+        foundInContractRegistry: boolean;
+        /** Required: a hit always carries its data. */
+        data: AddressSearchData;
+      }
+    | {
+        /** Not found in any registry that answered. */
+        found: false;
+        foundInWalletRegistry?: false;
+        foundInContractRegistry?: false;
+        data?: null;
+      }
+  );
+
+/** Sentence naming the registries that did not answer. */
+function unverifiedSentence(unverified: UnverifiedRegistries): string {
+  const names = unverified.map(registryKindLabel).join(' and ');
+  const registryWord = unverified.length > 1 ? 'registries' : 'registry';
+  return `The ${names} ${registryWord} could not be checked.`;
 }
 
 /**
@@ -115,11 +170,23 @@ function ContractSection({ data }: { data: ContractSearchData }) {
  */
 export function AddressSearchResult({
   found,
-  foundInWalletRegistry,
-  foundInContractRegistry,
-  data,
+  foundInWalletRegistry = false,
+  foundInContractRegistry = false,
+  data = null,
+  unverified = [],
+  reason = 'unreachable',
   className,
 }: AddressSearchResultProps) {
+  // A hit whose data went missing. The props union makes this unconstructible in TypeScript,
+  // but this component is one render away from a decision about someone's money, so it is
+  // also handled at runtime: props can arrive from plain JS, from a hand-built object, or
+  // from a future `data` shape that fails to parse.
+  //
+  // The rule is that it must never resolve DOWNWARD into a negative. `found` is the only
+  // signal here that is definitely trustworthy, and it says the address was matched — so this
+  // falls into the amber card, not the green one. (Finding UI-8.)
+  const foundWithoutData = found && !data;
+
   if (found && data) {
     // Determine severity - both registries is worst case
     const isBothRegistries = foundInWalletRegistry && foundInContractRegistry;
@@ -156,6 +223,16 @@ export function AddressSearchResult({
             Address <code className="text-xs break-all">{data.address}</code>
           </p>
 
+          {unverified.length > 0 && (
+            <p className="mb-3 flex items-start gap-2 text-xs font-medium">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                {unverifiedSentence(unverified)} This address may also appear there — what is shown
+                below is only what the reachable registries reported.
+              </span>
+            </p>
+          )}
+
           <div className="space-y-3 pt-3 border-t border-destructive/20">
             {foundInWalletRegistry && data.wallet && <WalletSection data={data.wallet} />}
 
@@ -170,7 +247,57 @@ export function AddressSearchResult({
     );
   }
 
-  // Not found in any registry
+  // Nothing found, but a registry never answered — this is an unknown, not a clean result.
+  // Rendering the green card here is the false negative the search layer exists to prevent.
+  // `foundWithoutData` lands here too: a match we cannot describe is still not an absence.
+  if (foundWithoutData || unverified.length > 0) {
+    return (
+      <Alert
+        className={cn(
+          'border-amber-500 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-100',
+          className
+        )}
+      >
+        <AlertTriangle className="h-4 w-4 text-amber-600" />
+        <AlertTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+          Could Not Verify
+          <Badge
+            variant="outline"
+            className="text-xs border-amber-500 text-amber-700 dark:text-amber-300"
+          >
+            Unverified
+          </Badge>
+        </AlertTitle>
+        <AlertDescription className="text-amber-800 dark:text-amber-200">
+          <p>
+            {foundWithoutData ? (
+              <>
+                This address was matched in the registry, but its details could not be loaded. This
+                is <strong>not</strong> a clean result — treat it as registered until it can be
+                checked again.
+              </>
+            ) : (
+              <>{unverifiedSentence(unverified)}</>
+            )}{' '}
+            {foundWithoutData ? null : reason === 'unsupported-identifier' ? (
+              <>
+                That registry cannot be queried for this kind of identifier, so nothing there was
+                checked. This is <strong>not</strong> a clean result — the address may be registered
+                there, and retrying will not change that.
+              </>
+            ) : (
+              <>
+                This is <strong>not</strong> a clean result — the address may be registered. Try
+                again before relying on it.
+              </>
+            )}
+          </p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Not found, and every registry answered.
   return (
     <Alert
       className={cn(

@@ -13,6 +13,7 @@ import fs from 'fs';
 
 import { KEYS_PATH, RELAY_PORT } from './config.mjs';
 import { verifyKeyIntegrity, writeFileSecurely, acquireLock, releaseLock } from './key-utils.mjs';
+import { createReservationGater, readRelayLimits, validateRelayLimits } from './relay-limits.mjs';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -20,8 +21,7 @@ let peerId;
 let privateKey;
 
 // TODO(p2p): Dockerfile hardening for the relay container.
-// - Run as non-root: add `USER node` (or create a dedicated `app` user) and ensure `/app` is owned by that user
-//   (e.g., `COPY --chown=node:node ...` or `RUN chown -R node:node /app`).
+// (The non-root half is done — the Dockerfile chowns /app and drops to `USER node`.)
 // - Add HEALTHCHECK: a simple TCP check against port 12312 is sufficient until we add a real HTTP health endpoint.
 //   Example: `HEALTHCHECK ... CMD node -e "const net=require('net');const s=net.connect(12312,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));"`
 
@@ -125,6 +125,35 @@ async function loadOrGenerateKeys() {
 
 await loadOrGenerateKeys();
 
+const limits = readRelayLimits();
+
+// The cross-field invariants the limit comments assert are checked against the RESOLVED set,
+// before the node is built — not just against the defaults in a unit test. A deployment that
+// sets one variable without the others gets told which ceiling is actually in force instead
+// of discovering it under load.
+for (const problem of validateRelayLimits(limits)) {
+  console.warn(`⚠ Relay limit misconfiguration: ${problem}`);
+}
+
+// The gater is constructed before the node exists and reads it lazily; see
+// createReservationGater. Both handles are `let … = null` rather than a forward reference to
+// the `const server` below: createLibp2p starts listening before it returns, so a reservation
+// arriving in that window would hit the temporal dead zone and throw a ReferenceError inside
+// the gater — which circuit-relay-v2 awaits (server/index.js:123), turning a fail-open into an
+// unhandled rejection. A null both callers already handle is the correct behaviour there.
+let node = null;
+let relayService = null;
+const denyInboundRelayReservation = createReservationGater({
+  getNode: () => node,
+  getRelayService: () => relayService,
+  reservationsPerHost: limits.reservationsPerHost,
+  onDeny: (host, peerId) => {
+    console.warn(
+      `⚠ Reservation denied: ${host} already holds ${limits.reservationsPerHost} reservations (peer ${peerId})`
+    );
+  },
+});
+
 const server = await createLibp2p({
   privateKey,
   addresses: {
@@ -134,7 +163,20 @@ const server = await createLibp2p({
   connectionEncrypters: [noise()],
   streamMuxers: [yamux()],
   connectionManager: {
-    maxConnections: 100,
+    // Must stay above the reservation ceiling: every reservation is backed by a live
+    // connection, so a lower value would cap reservations regardless of maxReservations.
+    maxConnections: limits.maxConnections,
+    // Per-host connection *rate* limit (libp2p default 5/sec). Stated explicitly because it
+    // is the first line against connection-churn floods, and a silent upstream default
+    // change would be easy to miss.
+    inboundConnectionThreshold: 5,
+  },
+  // circuit-relay-v2 has no per-peer or per-IP reservation option, but it consults the
+  // connection gater immediately before granting a reservation. This is what stops one host
+  // from taking every slot — the failure mode that takes P2P registration dark for victims
+  // who have no other way to register.
+  connectionGater: {
+    denyInboundRelayReservation,
   },
   services: {
     identify: identify(),
@@ -147,16 +189,38 @@ const server = await createLibp2p({
       // maintained by the ping/keepalive service, not by extending this timeout.
       hopTimeout: 60_000,
       reservations: {
-        maxReservations: 15,
-        reservationTtl: 30 * 60 * 1000, // 30 minutes
+        maxReservations: limits.maxReservations,
+        reservationTtl: limits.reservationTtlMs,
+        // Circuit relay v2 caps each relayed CONNECTION independently of the reservation.
+        // The libp2p defaults are 2 minutes and 128 KiB, and the connection is torn down when
+        // either is hit — pings do NOT reset them. Two minutes is shorter than our 1-4 minute
+        // randomized grace period, so a P2P registration that waits out a long grace period
+        // would lose its relayed connection mid-flow, right before the registration signature
+        // needs to be sent.
+        //
+        // The duration limit tracks reservationTtl and comfortably covers the worst-case grace
+        // period plus the registration window. The data limit is raised to 1 MiB — signatures
+        // and batch payloads are small, so this is headroom, not an expected volume.
+        defaultDurationLimit: limits.reservationTtlMs,
+        defaultDataLimit: 1024n * 1024n, // 1 MiB (default: 128 KiB)
       },
     }),
   },
 });
 
+node = server;
+relayService = server.services.relay;
+
 console.log(
   'Relay listening on multiaddr(s): ',
   server.getMultiaddrs().map((ma) => ma.toString())
+);
+
+// Surfaced at startup so a misconfigured deployment is visible in the logs rather than only
+// discoverable by exhausting it.
+console.log(
+  `Reservation limits: ${limits.maxReservations} total, ${limits.reservationsPerHost} per host, ` +
+    `TTL ${Math.round(limits.reservationTtlMs / 60000)}m, max ${limits.maxConnections} connections`
 );
 
 // Print relay info for development

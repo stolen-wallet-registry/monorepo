@@ -1,30 +1,10 @@
 /**
  * Zod schemas barrel export.
  *
- * Centralized validation schemas for type-safe form and data validation.
+ * Only the schemas the app actually consumes are re-exported. address.ts stays as an
+ * internal dependency of registration.ts; signature.ts was removed entirely (nothing
+ * validated signatures through Zod — relayed P2P payloads are validated in
+ * `lib/p2p/signatureData.ts`, and viem's types cover the rest).
  */
 
-// Address schemas
-export {
-  ethereumAddressSchema,
-  optionalEthereumAddressSchema,
-  type EthereumAddress,
-} from './address';
-
-// Signature schemas
-export {
-  hexStringSchema,
-  signatureSchema,
-  txHashSchema,
-  type Signature,
-  type TxHash,
-} from './signature';
-
-// Registration form schemas
-export {
-  initialFormSchema,
-  selfRelayFormSchema,
-  type InitialFormInput,
-  type InitialFormValues,
-  type SelfRelayFormValues,
-} from './registration';
+export { initialFormSchema, type InitialFormInput } from './registration';

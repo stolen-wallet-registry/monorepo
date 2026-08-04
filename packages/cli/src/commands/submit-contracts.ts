@@ -1,29 +1,38 @@
-import {
-  formatEther,
-  zeroAddress,
-  encodeFunctionData,
-  createPublicClient,
-  http,
-  pad,
-  type Hex,
-} from 'viem';
+import { zeroAddress, encodeFunctionData, createPublicClient, http, pad, type Hex } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { parseContractFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { OperatorSubmitterABI, FeeManagerABI } from '@swr/abis';
+import { formatBatchFee } from '../lib/format.js';
+import {
+  addressEntryKey,
+  applyDuplicatePolicy,
+  confirmSubmission,
+  describeDefaultedChains,
+  describeUnusedOutputDir,
+  enforceBatchLimits,
+  formatReportedChain,
+  summariseReportedChains,
+} from '../lib/safety.js';
+import { OperatorSubmitterABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
 export interface SubmitContractsOptions {
   file: string;
   env: 'local' | 'testnet' | 'mainnet';
-  privateKey?: string;
+  privateKey?: Hex;
   chainId?: number;
   outputDir?: string;
   dryRun?: boolean;
   buildOnly?: boolean;
+  /** `--dedupe`: drop repeated entries instead of refusing the file (audit V16). */
+  dedupe?: boolean;
+  /** `--max-batch-size`: raise the default cap, up to the hard ceiling (audit V16). */
+  maxBatchSize?: number;
+  /** `--yes`: skip the interactive confirmation for scripted use (audit V16). */
+  yes?: boolean;
 }
 
 /** Transaction data for multisig import (Safe, Zodiac, etc.) */
@@ -50,11 +59,44 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       );
     }
 
+    // 1b. `-o` is only read on the --build-only path; say so before anything else runs rather
+    // than leaving an empty output directory as the only clue.
+    const unusedOutputDir = describeUnusedOutputDir(options);
+    if (unusedOutputDir !== undefined) console.warn(chalk.yellow(`⚠ ${unusedOutputDir}`));
+
     // 2. Parse input file
     spinner.start('Parsing input file...');
     const defaultChainId = options.chainId ? BigInt(options.chainId) : 8453n;
-    const entries = await parseContractFile(options.file, defaultChainId);
-    spinner.succeed(`Loaded ${entries.length} contract addresses`);
+    const parsed = await parseContractFile(options.file, defaultChainId);
+    spinner.succeed(`Loaded ${parsed.length} contract addresses`);
+
+    // 2b. Blast-radius rails (audit V16). Dedupe first so a file that is only oversized
+    // because of repeats can still be fixed by --dedupe rather than by splitting it.
+    const { entries, duplicates } = applyDuplicatePolicy(parsed, addressEntryKey, {
+      dedupe: options.dedupe,
+      label: 'contracts',
+    });
+    if (duplicates.length > 0) {
+      console.warn(
+        chalk.yellow(
+          `Dropped ${parsed.length - entries.length} duplicate contract ${
+            parsed.length - entries.length === 1 ? 'entry' : 'entries'
+          } (--dedupe); submitting ${entries.length}.`
+        )
+      );
+    }
+    enforceBatchLimits({
+      count: entries.length,
+      maxBatchSize: options.maxBatchSize,
+      label: 'contracts',
+    });
+
+    // 2c. Which chain(s) this batch ACCUSES (audit S-4). Distinct from config.chain, which is
+    // where the transaction lands and is always the hub. Warn in every mode — --build-only
+    // hands a multisig a transaction whose reported chain is otherwise invisible.
+    const reportedChains = summariseReportedChains(entries);
+    const defaultedWarning = describeDefaultedChains(reportedChains);
+    if (defaultedWarning !== undefined) console.warn(chalk.yellow(`⚠ ${defaultedWarning}`));
 
     // 3. Create public client for fee quote (no private key needed)
     const publicClient = createPublicClient({
@@ -63,13 +105,19 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     });
 
     // 4. Quote fee
-    spinner.start('Fetching fee quote...');
+    //
+    // Must be OperatorSubmitter.quoteBatchFee(), NOT FeeManager.currentFeeWei().
+    // These are two unrelated prices: quoteBatchFee is the flat per-BATCH operator fee
+    // (free by default), while currentFeeWei is the per-REGISTRATION fee charged to
+    // individual users. Quoting the latter under-funds the call whenever a batch fee is
+    // enabled, reverting with OperatorSubmitter__InsufficientFee.
+    spinner.start('Fetching batch fee quote...');
     const fee = await publicClient.readContract({
-      address: config.contracts.feeManager,
-      abi: FeeManagerABI,
-      functionName: 'currentFeeWei',
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterABI,
+      functionName: 'quoteBatchFee',
     });
-    spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
+    spinner.succeed(`Batch fee: ${formatBatchFee(fee)}`);
 
     // 5. Prepare transaction data
     const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
@@ -120,20 +168,45 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Contracts: ${entries.length}`);
-      console.log(`  Fee: ${formatEther(fee)} ETH`);
+      for (const chain of reportedChains) {
+        console.log(
+          `  Reported on: ${formatReportedChain(chain.caip2)} — ${chain.count} contracts`
+        );
+      }
+      console.log(`  Batch fee: ${formatBatchFee(fee)}`);
+      console.log(
+        chalk.gray(
+          '  No simulation was performed — this checked the input file and quoted the fee. ' +
+            'Operator approval, pause state and the block gas limit are only tested on submit.'
+        )
+      );
       return;
     }
 
     // 7. For direct submission, private key is required
     if (!options.privateKey) {
       throw new Error(
-        'Private key required for direct submission. Use --build-only for multisig workflows.'
+        'No signing credential resolved for direct submission. Use --keystore <path>, or --build-only for multisig workflows.'
       );
     }
 
-    const { walletClient, account } = createClients(config, options.privateKey as `0x${string}`);
+    const { walletClient, account } = createClients(config, options.privateKey);
 
     console.log(chalk.gray(`Operator address: ${account}`));
+
+    // 7b. Last stop before an irreversible write (audit V16).
+    await confirmSubmission({
+      env: options.env,
+      label: 'contracts',
+      count: entries.length,
+      chainName: config.chain.name,
+      chainId: config.chain.id,
+      contractAddress: config.contracts.operatorSubmitter,
+      fee: formatBatchFee(fee),
+      reportedChains,
+      sample: entries.slice(0, 3).map((e) => `${e.address} @ ${e.reportedChain}`),
+      assumeYes: options.yes,
+    });
 
     // 8. Submit through OperatorSubmitter
     spinner.start('Submitting batch...');

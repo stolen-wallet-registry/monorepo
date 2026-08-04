@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { WalletRegistry } from "../src/registries/WalletRegistry.sol";
 import { IWalletRegistry } from "../src/interfaces/IWalletRegistry.sol";
 import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
 import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
+import { TimingConfig } from "../src/libraries/TimingConfig.sol";
 import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
@@ -96,16 +99,18 @@ contract WalletRegistryTest is EIP712TestHelper {
         walletRegistry.acknowledge(wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, v, r, s);
     }
 
-    /// @dev Skip block.number to the grace period start so registration is allowed
-    function _skipToRegistrationWindow() internal {
+    /// @dev Skip block.number into the registration window and return a valid `windowBlock`.
+    /// @return windowBlock A mined block at/after the grace period start, usable as the
+    ///         anti-phishing freshness reference for `register`
+    function _skipToRegistrationWindow() internal returns (uint256 windowBlock) {
         IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
-        vm.roll(ack.gracePeriodStart);
+        return _rollToWindow(ack.gracePeriodStart);
     }
 
     /// @dev Execute the full two-phase flow (ack + skip + register)
     function _doFullRegistration(address _forwarder, uint64 reportedChainId, uint64 _incidentTimestamp) internal {
         _doAck(_forwarder, reportedChainId, _incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
@@ -117,10 +122,13 @@ contract WalletRegistryTest is EIP712TestHelper {
             reportedChainId,
             _incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
         vm.prank(_forwarder);
-        walletRegistry.register(wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -151,6 +159,47 @@ contract WalletRegistryTest is EIP712TestHelper {
     function test_Constructor_RejectsZeroDeadlineBlocks() public {
         vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineInPast.selector);
         new WalletRegistry(owner, address(0), 10, 0);
+    }
+
+    /// @notice Constructor rejects `deadlineBlocks == 2 * graceBlocks` — the exact boundary.
+    /// @dev This is the case the old `< 2 * graceBlocks` bound wrongly ACCEPTED. It matters because
+    ///      `getGracePeriodEndBlock` can return `bn + 2g - 1` while `getDeadlineBlock` can return
+    ///      `bn + 2g`, and `resolveWindowBlockHash` requires `gracePeriodStart <= windowBlock <
+    ///      block.number` — so the earliest usable registration block is `gracePeriodStart + 1`,
+    ///      which on that draw is already at/past the deadline. An acknowledgement made under such
+    ///      a config can never be registered: the user burns a nonce and the acknowledgement gas
+    ///      and cannot re-acknowledge until the window expires. Pinned by
+    ///      `test_Constructor_AcceptsDeadlineTwiceGracePlusOne`, the other half of the boundary.
+    function test_Constructor_RejectsDeadlineExactlyTwiceGrace() public {
+        vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineInPast.selector);
+        new WalletRegistry(owner, address(0), 10, 20);
+    }
+
+    /// @notice Constructor accepts `deadlineBlocks == 2 * graceBlocks + 1` — the smallest config
+    ///         that guarantees a usable registration block for every randomised draw.
+    function test_Constructor_AcceptsDeadlineTwiceGracePlusOne() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 10, 21);
+        assertEq(reg.graceBlocks(), 10);
+        assertEq(reg.deadlineBlocks(), 21);
+    }
+
+    /// @notice Every draw under the minimum accepted config leaves a block on which `register`
+    ///         can actually run.
+    /// @dev The property the `+ 1` exists to guarantee, asserted directly rather than trusted:
+    ///      for the tightest legal config, `gracePeriodStart + 1 < deadline` must hold for EVERY
+    ///      randomised outcome, since `gracePeriodStart + 1` is the earliest block at which
+    ///      `resolveWindowBlockHash` can supply a mined `windowBlock` at/after the grace start.
+    ///      Rolling across many blocks re-draws `prevrandao`/`timestamp`/`number`, so this sweeps
+    ///      the offset space rather than sampling one draw.
+    function test_Constructor_MinimumConfigAlwaysLeavesARegistrationBlock() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 10, 21);
+
+        for (uint256 i = 0; i < 300; i++) {
+            vm.roll(block.number + 1);
+            uint256 graceStart = TimingConfig.getGracePeriodEndBlock(reg.graceBlocks());
+            uint256 deadlineBlock = TimingConfig.getDeadlineBlock(reg.deadlineBlocks());
+            assertLt(graceStart + 1, deadlineBlock, "draw leaves no usable registration block");
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -354,13 +403,12 @@ contract WalletRegistryTest is EIP712TestHelper {
     /// @notice Full two-phase flow: ack -> grace period -> register succeeds
     function test_Register_Success() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
-
-        bytes32 expectedIdentifier = bytes32(uint256(uint160(wallet)));
-        bytes32 expectedChainIdHash = CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID);
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         vm.expectEmit(true, true, false, true);
-        emit WalletRegistered(expectedIdentifier, expectedChainIdHash, incidentTimestamp, true);
+        emit WalletRegistered(
+            bytes32(uint256(uint160(wallet))), CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID), incidentTimestamp, true
+        );
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
@@ -372,11 +420,14 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
 
         // Verify registration stored
         assertTrue(walletRegistry.isWalletRegistered(wallet));
@@ -399,6 +450,9 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
+        // The grace-period check fires before the windowBlock is resolved, so the reference
+        // block here is irrelevant to the assertion.
+        uint256 windowBlock = block.number - 1;
         (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
             walletPrivateKey,
             address(walletRegistry),
@@ -407,12 +461,15 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__GracePeriodNotStarted.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects after acknowledgement deadline expires
@@ -425,6 +482,8 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
+        // Otherwise-valid window reference, so the expiry check is what fails.
+        uint256 windowBlock = ack.gracePeriodStart;
         (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
             walletPrivateKey,
             address(walletRegistry),
@@ -433,18 +492,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineExpired.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects when msg.sender is not the authorized forwarder
     function test_Register_RejectsWrongForwarder() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         address wrongForwarder = makeAddr("wrongForwarder");
         vm.deal(wrongForwarder, 10 ether);
@@ -460,18 +522,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(wrongForwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
-        walletRegistry.register(wallet, wrongForwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, wrongForwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects invalid EIP-712 signature (wrong private key)
     function test_Register_RejectsInvalidSignature() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint256 wrongPrivateKey = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef;
         uint256 deadline = block.timestamp + 1 hours;
@@ -484,18 +549,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects mismatched reportedChainId between ack and register phases
     function test_Register_RejectsMismatchedReportedChainId() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         // Use different reportedChainId in registration signature
         uint64 wrongChainId = 10; // Different from REPORTED_CHAIN_ID=1
@@ -509,18 +577,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             wrongChainId,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, wrongChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, wrongChainId, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects mismatched incidentTimestamp between ack and register phases
     function test_Register_RejectsMismatchedIncidentTimestamp() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint64 wrongTimestamp = incidentTimestamp + 1;
         uint256 deadline = block.timestamp + 1 hours;
@@ -533,12 +604,197 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             wrongTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, wrongTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, wrongTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ANTI-PHISHING: WINDOW BLOCK FRESHNESS (V1)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A registration signature that commits to a block predating the grace period is rejected.
+    /// @dev This is the core anti-phishing control: the referenced block must not have existed
+    ///      when the acknowledgement was signed, so a phishing page cannot harvest both
+    ///      signatures in one sitting. Referencing an older block would restore that ability.
+    function test_register_revertsIfWindowBlockBeforeGracePeriod() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
+        _rollToWindow(ack.gracePeriodStart);
+
+        // One block BEFORE the window opens — a hash that already existed at ack time.
+        uint256 windowBlock = ack.gracePeriodStart - 1;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockBeforeGracePeriod.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    /// @notice A registration referencing the current (unmined) block is rejected.
+    /// @dev `blockhash(block.number)` is zero, so accepting it would let a signer commit to a
+    ///      value they can compute in advance — defeating the freshness proof entirely.
+    function test_register_revertsIfWindowBlockNotMined() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
+        _rollToWindow(ack.gracePeriodStart);
+
+        uint256 windowBlock = block.number; // not yet mined
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockNotMined.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    /// @notice A registration referencing a block older than 256 blocks is rejected.
+    /// @dev Beyond `MAX_WINDOW_BLOCK_AGE` the EVM no longer exposes the hash, so the proof is
+    ///      unverifiable and the user must re-sign against a fresher block. Uses a registry with
+    ///      a long deadline window so the ack itself has not expired when we roll 300 blocks.
+    function test_register_revertsIfWindowBlockTooOld() public {
+        // deadlineBlocks large enough that a 300-block roll stays inside the ack window
+        WalletRegistry longRegistry = new WalletRegistry(owner, address(0), GRACE_BLOCKS, 2000);
+
+        uint256 windowBlock;
+        {
+            uint256 ackDeadline = block.timestamp + 1 hours;
+            uint256 ackNonce = longRegistry.nonces(wallet);
+            (uint8 av, bytes32 ar, bytes32 as_) = _signWalletAck(
+                walletPrivateKey,
+                address(longRegistry),
+                wallet,
+                forwarder,
+                REPORTED_CHAIN_ID,
+                incidentTimestamp,
+                ackNonce,
+                ackDeadline
+            );
+            vm.prank(forwarder);
+            longRegistry.acknowledge(
+                wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, ackDeadline, ackNonce, av, ar, as_
+            );
+
+            IWalletRegistry.AcknowledgementData memory ack = longRegistry.getAcknowledgementData(wallet);
+            windowBlock = _rollToWindow(ack.gracePeriodStart);
+        }
+
+        // Age the reference out of blockhash range
+        vm.roll(block.number + 300);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = longRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(longRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        longRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE LIFETIME / FORWARDER BINDING (V13)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Only the forwarder named in the signature may submit the acknowledgement.
+    /// @dev A third-party submitter could otherwise grind their own address to steer the
+    ///      "randomized" timing, or burn the victim's nonce to grief them.
+    function test_acknowledge_revertsIfSenderIsNotForwarder() public {
+        address stranger = makeAddr("stranger");
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline
+        );
+
+        vm.prank(stranger);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
+        walletRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice Registration rejects a deadline beyond MAX_SIGNATURE_LIFETIME.
+    /// @dev Bounds how long a harvested signature stays usable — without the cap a hostile
+    ///      frontend could set an effectively unbounded deadline and submit months later.
+    ///      Derived from the constant rather than hardcoded, so raising MAX_SIGNATURE_LIFETIME
+    ///      cannot silently turn this into a test of a deadline that is now inside the bound.
+    ///      Matches the sibling test in TransactionRegistry.t.sol.
+    function test_register_revertsIfDeadlineTooFarInFuture() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineTooFarInFuture.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -615,6 +871,64 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         // Still registered — no state change, no revert
         assertTrue(walletRegistry.isWalletRegistered(wallet));
+    }
+
+    /// @notice A zero identifier arriving over the bridge is dropped, not written.
+    /// @dev Every other write path rejects a zero identifier outright. This one cannot revert —
+    ///      Hyperlane re-delivers a reverting message indefinitely, so a revert here would turn
+    ///      one malformed payload into a permanently undeliverable message. Returning drops it
+    ///      and lets the relayer mark it delivered. Without the guard, `address(0)` was written to
+    ///      the registry as a "stolen wallet", which every consumer would then report as such.
+    function test_RegisterFromHub_IgnoresZeroIdentifier() public {
+        address inbox = makeAddr("inbox");
+        hub.setInbox(inbox);
+
+        vm.prank(inbox);
+        hub.registerWalletFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            bytes32(0),
+            bytes32(0), // zero identifier
+            CAIP10Evm.caip2Hash(uint64(10)),
+            incidentTimestamp,
+            CAIP10Evm.caip2Hash(uint64(11_155_420)),
+            false,
+            1,
+            keccak256("zeroId")
+        );
+
+        assertFalse(walletRegistry.isWalletRegistered(address(0)), "The zero address must never be registered");
+    }
+
+    /// @notice A future incident timestamp arriving over the bridge is clamped to 0 ("unknown").
+    /// @dev Same constraint as above: this path cannot revert, so it sanitises instead. A future
+    ///      incidentTimestamp is unfalsifiable at write time and permanently poisons every
+    ///      time-based analytic downstream (a theft dated 2099). `acknowledge`, `register` and the
+    ///      operator batch path all reject it; this one clamps it to the established sentinel and
+    ///      still records the registration, which is the part that matters to the victim.
+    function test_RegisterFromHub_ClampsFutureIncidentTimestamp() public {
+        address inbox = makeAddr("inbox");
+        hub.setInbox(inbox);
+        address crossChainWallet = makeAddr("futureIncidentWallet");
+
+        vm.prank(inbox);
+        hub.registerWalletFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            bytes32(0),
+            bytes32(uint256(uint160(crossChainWallet))),
+            CAIP10Evm.caip2Hash(uint64(10)),
+            uint64(block.timestamp + 365 days),
+            CAIP10Evm.caip2Hash(uint64(11_155_420)),
+            false,
+            1,
+            keccak256("futureIncident")
+        );
+
+        assertTrue(walletRegistry.isWalletRegistered(crossChainWallet), "The registration must still land");
+        assertEq(
+            walletRegistry.getWalletEntry(crossChainWallet).incidentTimestamp,
+            0,
+            "A future incident timestamp must be clamped to the unknown sentinel"
+        );
     }
 
     /// @notice registerFromHub reverts when called by a non-hub address
@@ -799,26 +1113,19 @@ contract WalletRegistryTest is EIP712TestHelper {
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice generateHashStruct returns non-zero deadline and hashStruct for step 1 (ack) and step 2 (reg)
-    function test_GenerateHashStruct_Step1And2() public {
-        // Step 1 — acknowledgement
+    /// @notice getSignatureDeadline returns a usable deadline for both phases.
+    /// @dev It returns ONLY a deadline. It deliberately no longer returns a hash struct: the
+    ///      registration typehash commits to `windowBlockHash`, which is not knowable at this
+    ///      point in the flow, so any digest built here would be one no wallet can produce.
+    ///      Callers build their own typed data. See the NatSpec on the function.
+    function test_GetSignatureDeadline_Step1And2() public {
         vm.prank(wallet);
-        (uint256 deadline1, bytes32 hash1) =
-            walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
-
+        uint256 deadline1 = walletRegistry.getSignatureDeadline(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
         assertGt(deadline1, block.timestamp);
-        assertTrue(hash1 != bytes32(0));
 
-        // Step 2 — registration
         vm.prank(wallet);
-        (uint256 deadline2, bytes32 hash2) =
-            walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
-
+        uint256 deadline2 = walletRegistry.getSignatureDeadline(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
         assertGt(deadline2, block.timestamp);
-        assertTrue(hash2 != bytes32(0));
-
-        // Both steps should produce different hashStructs (different type hashes)
-        assertTrue(hash1 != hash2);
     }
 
     /// @notice getDeadlines returns correct timing info before and after acknowledgement
@@ -926,7 +1233,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         address nonOwner = makeAddr("nonOwner");
 
         vm.prank(nonOwner);
-        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         walletRegistry.setHub(makeAddr("newHub"));
     }
 
@@ -959,7 +1266,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         address nonOwner = makeAddr("nonOwner");
 
         vm.prank(nonOwner);
-        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         walletRegistry.setOperatorSubmitter(makeAddr("newSubmitter"));
     }
 
@@ -991,7 +1298,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         }
 
         IWalletRegistry.AcknowledgementData memory ack = feeRegistry.getAcknowledgementData(wallet);
-        vm.roll(ack.gracePeriodStart);
+        uint256 windowBlock = _rollToWindow(ack.gracePeriodStart);
 
         // Register with exact required fee
         uint256 fee = fm.currentFeeWei();
@@ -999,12 +1306,22 @@ contract WalletRegistryTest is EIP712TestHelper {
             uint256 deadline1 = block.timestamp + 1 hours;
             uint256 nonce1 = feeRegistry.nonces(wallet);
             (uint8 v1, bytes32 r1, bytes32 s1) = _signWalletReg(
-                walletPrivateKey, address(feeRegistry), wallet, forwarder, REPORTED_CHAIN_ID, ts, nonce1, deadline1
+                walletPrivateKey,
+                address(feeRegistry),
+                wallet,
+                forwarder,
+                REPORTED_CHAIN_ID,
+                ts,
+                nonce1,
+                deadline1,
+                windowBlock
             );
 
             vm.deal(forwarder, fee);
             vm.prank(forwarder);
-            feeRegistry.register{ value: fee }(wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline1, nonce1, v1, r1, s1);
+            feeRegistry.register{ value: fee }(
+                wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline1, nonce1, windowBlock, v1, r1, s1
+            );
         }
 
         // Fee should be held by the registry since hub is unset
@@ -1015,6 +1332,355 @@ contract WalletRegistryTest is EIP712TestHelper {
         feeRegistry.withdrawCollectedFees();
         assertEq(address(feeRegistry).balance, 0);
         assertEq(owner.balance - ownerBefore, fee);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE MALLEABILITY AND REPLAY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev secp256k1 group order. For any valid (v, r, s) the pair (v^1, r, n - s) recovers the
+    ///      same signer under a naive `ecrecover`, which is what makes a signature "malleable".
+    uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    /// @dev Produce the malleated twin of a signature: same signer under raw ecrecover.
+    function _malleate(uint8 v, bytes32 s) internal pure returns (uint8 flippedV, bytes32 flippedS) {
+        flippedS = bytes32(SECP256K1_N - uint256(s));
+        flippedV = v == 27 ? 28 : 27;
+    }
+
+    /// @notice A malleated registration signature is rejected.
+    /// @dev SECURITY. Every recovery site uses OpenZeppelin's ECDSA, which rejects s > n/2, so the
+    ///      property holds today — but nothing anywhere in the suite pinned it. A hand-rolled
+    ///      `ecrecover` swapped in during a gas optimisation would accept the malleated twin,
+    ///      giving a second distinct (v,r,s) for the same signed message. That defeats any
+    ///      signature-identity assumption downstream (dedup, off-chain replay caches) even though
+    ///      the on-chain nonce still bounds it to one use.
+    function test_Register_RejectsMalleatedSignature() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+        (uint8 flippedV, bytes32 flippedS) = _malleate(v, s);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, flippedV, r, flippedS
+        );
+
+        assertFalse(walletRegistry.isWalletRegistered(wallet), "A malleated signature must not register");
+    }
+
+    /// @notice A captured acknowledgement signature cannot be replayed once its window lapses.
+    /// @dev SECURITY. The nonce increment is the stated replay defense, but it was only ever
+    ///      covered indirectly (by tests that pass a deliberately wrong nonce). This drives the
+    ///      real attack: capture a genuine acknowledgement, wait for the registration window to
+    ///      expire without the victim completing, then re-submit the identical bytes to reopen a
+    ///      window on the victim's behalf. The `AlreadyAcknowledged` guard has lapsed by then, so
+    ///      the nonce is the only thing standing in the way.
+    function test_Acknowledge_CapturedSignatureCannotBeReplayed() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline
+        );
+
+        vm.prank(forwarder);
+        walletRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+
+        // Let the acknowledgement window lapse. vm.roll moves block.number only, so the EIP-712
+        // `deadline` (a timestamp) is still valid — the nonce must be what rejects this.
+        vm.roll(walletRegistry.getAcknowledgementData(wallet).deadline + 1);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidNonce.selector);
+        walletRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice A registration signature cannot be replayed after it has succeeded.
+    /// @dev Two independent things stop this — the acknowledgement is deleted on success, and the
+    ///      nonce has moved — and the deletion is what fires first. Asserting the wallet is
+    ///      registered exactly once (rather than only that the second call reverts) is what makes
+    ///      this test survive a change to which guard wins.
+    function test_Register_CannotBeReplayedAfterSuccess() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+        uint64 registeredAt = walletRegistry.getWalletEntry(wallet).registeredAt;
+
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+
+        assertEq(walletRegistry.getWalletEntry(wallet).registeredAt, registeredAt, "Entry must not be rewritten");
+        assertEq(walletRegistry.nonces(wallet), 2, "Nonce must not advance on a rejected replay");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE COLLECTION (T-3)
+    //
+    // `setUp` deploys the suite's registry with feeManager = address(0), so `_collectFee`
+    // returns on its first line in every other test in this file. That leaves the primary
+    // user-paid action's entire fee path — the insufficient-fee guard, the hub forward, the
+    // excess refund and both failure branches — unexecuted. These tests deploy a registry that
+    // actually prices registrations and drive each branch. Ported from the equivalent block in
+    // TransactionRegistry.t.sol, which had them already.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Deploy a WalletRegistry that actually charges, wired to the suite's hub.
+    function _deployFeeRegistry() internal returns (WalletRegistry feeRegistry, FeeManager fm) {
+        MockAggregator agg = new MockAggregator(300_000_000_000); // $3000
+        fm = new FeeManager(owner, address(agg));
+        feeRegistry = new WalletRegistry(owner, address(fm), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        feeRegistry.setHub(address(hub));
+    }
+
+    /// @dev Window block staged in storage: `register` takes ten arguments, and holding this as a
+    ///      local in the callers below overflows the EVM's 16-slot stack (no via-ir here).
+    uint256 internal _feeWindowBlock;
+
+    /// @dev Acknowledge on an arbitrary registry instance, then roll into the registration window.
+    ///      Reads the nonce via an external call, so call this BEFORE any vm.expectRevert.
+    function _ackOn(WalletRegistry reg, address _forwarder) internal {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = reg.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(
+            walletPrivateKey, address(reg), wallet, _forwarder, REPORTED_CHAIN_ID, incidentTimestamp, nonce, deadline
+        );
+        vm.prank(_forwarder);
+        reg.acknowledge(wallet, _forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+
+        _feeWindowBlock = _rollToWindow(reg.getAcknowledgementData(wallet).gracePeriodStart);
+    }
+
+    /// @dev Register on an arbitrary registry instance with an explicit `msg.value`.
+    ///      Reads the nonce via an external call, so call this BEFORE any vm.expectRevert.
+    function _regOn(WalletRegistry reg, address _forwarder, uint256 sendValue) internal {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = reg.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(reg),
+            wallet,
+            _forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            _feeWindowBlock
+        );
+        vm.prank(_forwarder);
+        reg.register{ value: sendValue }(
+            wallet, _forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, _feeWindowBlock, v, r, s
+        );
+    }
+
+    /// @notice The happy path: with a hub configured, the required fee is forwarded to the hub.
+    /// @dev The branch `hub != address(0)` in `_collectFee` had no coverage at all — the only
+    ///      fee-paying test in this file (`test_FeesHeldWhenHubUnset_CanWithdraw`) deliberately
+    ///      leaves the hub unset, which is the OTHER branch. A registry that silently kept the
+    ///      fee instead of forwarding it passed the whole suite.
+    function test_Register_ForwardsFeeToHub() public {
+        (WalletRegistry feeRegistry, FeeManager fm) = _deployFeeRegistry();
+
+        uint256 fee = fm.currentFeeWei();
+        assertGt(fee, 0, "Precondition: the fee manager must price this non-zero");
+        uint256 hubBefore = address(hub).balance;
+
+        _ackOn(feeRegistry, forwarder);
+        vm.deal(forwarder, fee);
+        _regOn(feeRegistry, forwarder, fee);
+
+        assertTrue(feeRegistry.isWalletRegistered(wallet));
+        assertEq(address(hub).balance - hubBefore, fee, "Hub should have received the fee");
+        assertEq(address(feeRegistry).balance, 0, "Registry must not retain the fee when a hub is set");
+    }
+
+    /// @notice Paying less than the current fee reverts.
+    function test_Register_RejectsInsufficientFee() public {
+        (WalletRegistry feeRegistry, FeeManager fm) = _deployFeeRegistry();
+        uint256 fee = fm.currentFeeWei();
+
+        _ackOn(feeRegistry, forwarder);
+
+        // Pre-compute nonce and signature: vm.expectRevert applies to the next external call,
+        // including the view reads inside _regOn.
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = feeRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(feeRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            _feeWindowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InsufficientFee.selector);
+        feeRegistry.register{ value: fee - 1 }(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, _feeWindowBlock, v, r, s
+        );
+
+        assertFalse(feeRegistry.isWalletRegistered(wallet), "Underpaid registration must not persist");
+    }
+
+    /// @notice Overpayment above the required fee is refunded to msg.sender.
+    function test_Register_RefundsExcess() public {
+        (WalletRegistry feeRegistry, FeeManager fm) = _deployFeeRegistry();
+        uint256 fee = fm.currentFeeWei();
+        uint256 overpayment = 1 ether;
+
+        _ackOn(feeRegistry, forwarder);
+
+        vm.deal(forwarder, fee + overpayment);
+        uint256 balBefore = forwarder.balance;
+        _regOn(feeRegistry, forwarder, fee + overpayment);
+
+        assertEq(balBefore - forwarder.balance, fee, "Forwarder should only pay the exact fee");
+    }
+
+    /// @notice A hub that cannot accept ETH makes the whole registration revert.
+    /// @dev SECURITY-ADJACENT. The fee forward happens AFTER the wallet entry is written, so if
+    ///      this branch did not revert the registry would record a registration whose fee never
+    ///      arrived. Driving it needs a hub address that rejects value — an ordinary EOA hub
+    ///      accepts ETH and never reaches the branch.
+    function test_Register_RevertsWhenHubRejectsFee() public {
+        (WalletRegistry feeRegistry, FeeManager fm) = _deployFeeRegistry();
+        feeRegistry.setHub(address(new EthRejector()));
+
+        uint256 fee = fm.currentFeeWei();
+        _ackOn(feeRegistry, forwarder);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = feeRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(feeRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            _feeWindowBlock
+        );
+
+        vm.deal(forwarder, fee);
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__FeeTransferFailed.selector);
+        feeRegistry.register{ value: fee }(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, _feeWindowBlock, v, r, s
+        );
+
+        assertFalse(feeRegistry.isWalletRegistered(wallet), "A failed fee transfer must roll the entry back");
+    }
+
+    /// @notice A forwarder that cannot receive the refund makes the registration revert.
+    /// @dev The refund goes to `msg.sender`, so this only fires for a contract forwarder — which
+    ///      is exactly the relayer/paymaster shape the sponsored flow is built around. Reverting
+    ///      is the correct behaviour (the alternative silently keeps the overpayment), but nothing
+    ///      pinned it, so a change to swallow the failed refund would have gone unnoticed.
+    function test_Register_RevertsWhenRefundFails() public {
+        (WalletRegistry feeRegistry, FeeManager fm) = _deployFeeRegistry();
+        uint256 fee = fm.currentFeeWei();
+
+        NonPayableForwarder relayer = new NonPayableForwarder();
+        vm.deal(address(relayer), fee + 1 ether);
+
+        _ackOn(feeRegistry, address(relayer));
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = feeRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(feeRegistry),
+            wallet,
+            address(relayer),
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            _feeWindowBlock
+        );
+
+        vm.expectRevert(IWalletRegistry.WalletRegistry__RefundFailed.selector);
+        relayer.forwardRegister{ value: fee + 1 ether }(
+            feeRegistry, wallet, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, _feeWindowBlock, v, r, s
+        );
+    }
+
+    /// @notice Free-registration mode (feeManager == address(0)) refunds everything the caller sent.
+    /// @dev `_collectFee` used to `return` on its first line in this mode, BEFORE the excess-refund
+    ///      branch, so any `msg.value` was silently retained and recoverable only by the owner.
+    ///      `feeManager == address(0)` is a documented, supported deployment shape (it is what this
+    ///      suite's own `setUp` uses), and every other fee mode refunds the overpayment — so the one
+    ///      mode that charges nothing must not be the one that keeps the most.
+    function test_Register_FreeMode_RefundsEntireMsgValue() public {
+        // The suite registry is deployed with feeManager == address(0).
+        assertEq(walletRegistry.quoteRegistration(wallet), 0, "Precondition: registrations are free");
+
+        uint256 sent = 1 ether;
+        vm.deal(forwarder, sent);
+        uint256 registryBefore = address(walletRegistry).balance;
+
+        _ackOn(walletRegistry, forwarder);
+        _regOn(walletRegistry, forwarder, sent);
+
+        assertTrue(walletRegistry.isWalletRegistered(wallet), "Registration must still succeed");
+        assertEq(forwarder.balance, sent, "Caller must get the full amount back");
+        assertEq(address(walletRegistry).balance, registryBefore, "Registry must retain nothing");
+    }
+
+    /// @notice Free-registration mode with msg.value == 0 is unaffected (the refund is a no-op).
+    function test_Register_FreeMode_ZeroValueIsNoOp() public {
+        _ackOn(walletRegistry, forwarder);
+        _regOn(walletRegistry, forwarder, 0);
+
+        assertTrue(walletRegistry.isWalletRegistered(wallet));
+        assertEq(address(walletRegistry).balance, 0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1128,8 +1794,36 @@ contract WalletRegistryTest is EIP712TestHelper {
         bytes32 packed = vm.load(address(walletRegistry), reads[0]);
         assertNotEq(packed, bytes32(0), "WalletEntry should be populated");
 
-        // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
-        assertEq(vm.load(address(walletRegistry), nextSlot), bytes32(0), "WalletEntry overflowed to second slot");
+        // Deliberately NOT asserted: that slot+1 is zero. Entry slots are keccak-derived, so the
+        // neighbouring slot is unallocated whatever the struct's size — that assertion held for a
+        // two-slot struct too and read as a second, independent proof of the invariant while
+        // proving nothing. The vm.record()/reads.length check above is the real proof.
+    }
+}
+
+/// @dev A contract with no `receive`/`fallback`. Used as a hub address to drive
+///      `WalletRegistry__FeeTransferFailed` — an EOA hub always accepts ETH, so the branch is
+///      unreachable without one of these.
+contract EthRejector { }
+
+/// @dev A contract forwarder that pays gas for someone else's registration but cannot accept the
+///      excess refund. Drives `WalletRegistry__RefundFailed`, which only fires for a contract
+///      `msg.sender` — deliberately no `receive`/`fallback`.
+contract NonPayableForwarder {
+    function forwardRegister(
+        WalletRegistry reg,
+        address wallet,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
+        uint256 windowBlock,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable {
+        reg.register{ value: msg.value }(
+            wallet, address(this), reportedChainId, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 }

@@ -1,8 +1,7 @@
 'use client';
 
-/* eslint-disable react-hooks/refs -- MagicUI pattern: uses refs during render for derived state sync */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, type MotionProps } from 'motion/react';
+import { AnimatePresence, domAnimation, LazyMotion, m, type MotionProps } from 'motion/react';
 
 import { cn } from '../lib/utils';
 
@@ -44,8 +43,11 @@ export function HyperText({
   characterSet = DEFAULT_CHARACTER_SET,
   ...props
 }: HyperTextProps) {
+  // `m.create` is the lazy counterpart of `motion.create`: same factory, but the produced
+  // component looks its features up from the nearest LazyMotion instead of embedding the
+  // whole bundle. It must therefore only ever be rendered inside the LazyMotion below.
   const MotionComponent = useMemo(
-    () => motion.create(Component, { forwardMotionProps: true }),
+    () => m.create(Component, { forwardMotionProps: true }),
     [Component]
   );
 
@@ -53,13 +55,20 @@ export function HyperText({
   const [isAnimating, setIsAnimating] = useState(false);
   const iterationCount = useRef(0);
   const elementRef = useRef<HTMLElement>(null);
-  const prevChildrenRef = useRef(children);
 
-  // Reset displayText when children changes (synchronize on render, not in effect)
-  if (prevChildrenRef.current !== children) {
-    prevChildrenRef.current = children;
+  // Reset displayText when children changes (synchronize on render, not in effect).
+  // The previous value is tracked in state rather than a ref: adjusting state during
+  // render is the documented React pattern, but *writing a ref* during render is not —
+  // a render React discards would still have mutated it, desynchronising the comparison.
+  // See https://react.dev/learn/you-might-not-need-an-effect
+  const [prevChildren, setPrevChildren] = useState(children);
+  if (prevChildren !== children) {
+    setPrevChildren(children);
     setDisplayText(children.split(''));
-    iterationCount.current = 0;
+    // iterationCount is not reset here: the scramble effect recomputes it from elapsed
+    // progress on every frame before reading it, and handleAnimationTrigger zeroes it
+    // before starting. Resetting during render would be another render-phase mutation
+    // for no behavioural gain.
   }
 
   const handleAnimationTrigger = () => {
@@ -134,19 +143,37 @@ export function HyperText({
   }, [children, duration, isAnimating, characterSet]);
 
   return (
-    <MotionComponent
-      ref={elementRef}
-      className={cn('overflow-hidden py-2 text-4xl font-bold', className)}
-      onMouseEnter={handleAnimationTrigger}
-      {...props}
-    >
-      <AnimatePresence>
-        {displayText.map((letter, index) => (
-          <motion.span key={index} className={cn('font-mono', letter === ' ' ? 'w-3' : '')}>
-            {letter.toUpperCase()}
-          </motion.span>
-        ))}
-      </AnimatePresence>
-    </MotionComponent>
+    // Every `m.*` descendant resolves its features through this provider, so it has to sit
+    // above both MotionComponent and the per-character spans. `domAnimation` covers what is
+    // used here (animate + AnimatePresence exit); `domMax` would additionally pull in drag
+    // and layout projection, neither of which this component uses.
+    <LazyMotion features={domAnimation}>
+      {/* MotionComponent is memoized on `Component`, so it is stable for the lifetime of any
+          given `as` prop. Changing `as` changes the rendered element type, which remounts and
+          resets state regardless of how the motion wrapper is built — the memo is as stable as
+          this can be made. */}
+      {/* eslint-disable-next-line react-hooks/static-components */}
+      <MotionComponent
+        ref={elementRef}
+        className={cn('overflow-hidden py-2 text-4xl font-bold', className)}
+        onMouseEnter={handleAnimationTrigger}
+        {...props}
+      >
+        <AnimatePresence>
+          {/* Index is the correct key here: displayText is a fixed-length character array
+              mutated in place every animation frame, and characters repeat. Keying by the
+              letter would collide on duplicates and remount every span each frame, which
+              destroys the scramble animation. The suppression directive below must stay on
+              the line directly above the `key` — react-doctor ignores it otherwise, which is
+              why this explanation sits above the `.map` rather than next to the directive. */}
+          {displayText.map((letter, index) => (
+            // react-doctor-disable-next-line react-doctor/no-array-index-as-key
+            <m.span key={index} className={cn('font-mono', letter === ' ' ? 'w-3' : '')}>
+              {letter.toUpperCase()}
+            </m.span>
+          ))}
+        </AnimatePresence>
+      </MotionComponent>
+    </LazyMotion>
   );
 }

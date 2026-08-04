@@ -21,3 +21,5 @@ export {
   type TransactionSearchData,
   type TransactionChainReport,
 } from './useRegistrySearch';
+
+export { useIndexerStatus, DEFAULT_MAX_LAG_SECONDS, type IndexerStatus } from './useIndexerStatus';

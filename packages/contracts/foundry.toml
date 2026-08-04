@@ -8,7 +8,7 @@ solc = "0.8.24"
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
-    "@hyperlane-xyz/core/=lib/hyperlane-monorepo/solidity/",
+    "@hyperlane-xyz/core/=src/vendor/hyperlane/",
 ]
 
 # Dependencies: Run `forge install` after clone
@@ -23,11 +23,13 @@ gas_reports = ["*"]
 
 [profile.ci]
 fuzz = { runs = 10_000 }
-verbosity = 4
+# 4 dumps full traces for every test, which buries the failure in CI logs.
+# 3 prints traces for failing tests only.
+verbosity = 3
 
 [lint]
 lint_on_build = false
-ignore = ["test/**", "script/**"]
+ignore = ["test/**", "script/**", "src/vendor/**"]
 
 [fmt]
 bracket_spacing = true

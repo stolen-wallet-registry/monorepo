@@ -18,6 +18,7 @@ export {
 
 export {
   SIGNATURE_TTL_MS,
+  SignatureStorageError,
   storeSignature,
   getSignature,
   removeSignature,
@@ -25,6 +26,14 @@ export {
   clearAllSignatures,
   type StoredSignature,
 } from './storage';
+
+export {
+  resolveWindowBlock,
+  isWindowBlockStale,
+  describeWindowBlockStale,
+  WINDOW_BLOCK_HISTORY_LIMIT,
+  type WindowBlockCommitment,
+} from './windowBlock';
 
 export {
   parseSignature,

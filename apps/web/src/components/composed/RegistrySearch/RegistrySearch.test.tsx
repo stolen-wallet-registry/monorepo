@@ -1,162 +1,168 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { RegistrySearchResult } from './RegistrySearchResult';
-import { TooltipProvider } from '@swr/ui';
-import type { Address } from '@/lib/types/ethereum';
+/**
+ * Tests for how RegistrySearch surfaces a search that could not be completed.
+ *
+ * `@swr/search` fails CLOSED: when it cannot establish whether an identifier is registered it
+ * throws `SearchUnavailableError` instead of returning something an integrator could read as
+ * "clean". TanStack Query turns that throw into `error`, and if this component renders it as a
+ * generic one-line "Error querying indexer: …" the user is told the *indexer* misbehaved rather
+ * than the thing that actually matters: the registry was NOT checked, and this is not a clean
+ * result. That is audit finding V2, and these tests pin the distinction.
+ */
 
-// Wrap component with required providers
-function renderWithProviders(ui: React.ReactElement) {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-}
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen } from '@testing-library/react';
+import { render } from '@/test/test-utils';
+import { SearchUnavailableError } from '@swr/search';
+import { RegistrySearch } from './RegistrySearch';
 
-describe('RegistrySearchResult', () => {
-  const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
-  const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
+const ADDRESS = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
 
-  describe('registered status', () => {
-    const mockRegistrationData = {
-      registeredAt: 12345678n,
-      incidentTimestamp: 0n,
-      batchId: 0n,
-      bridgeId: 0,
-      isSponsored: false,
-    };
+const searchResult = {
+  data: undefined as unknown,
+  isLoading: false,
+  error: null as unknown,
+};
 
-    it('displays registered alert with destructive styling', () => {
-      renderWithProviders(
-        <RegistrySearchResult
-          address={sampleAddress}
-          status="registered"
-          registrationData={mockRegistrationData}
-        />
-      );
+vi.mock('@/hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks')>();
+  return {
+    ...actual,
+    useRegistrySearch: () => searchResult,
+    useEnsResolve: () => ({ address: undefined, isLoading: false, isError: false }),
+    useIndexerStatus: () => ({ stale: false, data: undefined }),
+  };
+});
 
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Registered as Stolen')).toBeInTheDocument();
-      expect(screen.getByText('Compromised')).toBeInTheDocument();
-    });
+beforeEach(() => {
+  searchResult.data = undefined;
+  searchResult.isLoading = false;
+  searchResult.error = null;
+});
 
-    it('shows registration details when data is provided', () => {
-      renderWithProviders(
-        <RegistrySearchResult
-          address={sampleAddress}
-          status="registered"
-          registrationData={mockRegistrationData}
-        />
-      );
+/** Language that would let the user conclude the address is safe. */
+const AFFIRMATIVE_CLEAN = /\b(is not in the|not registered|no match found)\b/i;
 
-      expect(screen.getByText('Registered at block:')).toBeInTheDocument();
-      expect(screen.getByText('12345678')).toBeInTheDocument();
-    });
+describe('RegistrySearch — unavailable search', () => {
+  it('renders the "Could Not Verify" card instead of a generic error line', () => {
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('fetch failed')]);
 
-    it('shows sponsored badge when registration was sponsored', () => {
-      renderWithProviders(
-        <RegistrySearchResult
-          address={sampleAddress}
-          status="registered"
-          registrationData={{ ...mockRegistrationData, isSponsored: true }}
-        />
-      );
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
 
-      expect(screen.getByText('Sponsored Registration')).toBeInTheDocument();
-    });
-
-    it('renders without registration data', () => {
-      renderWithProviders(
-        <RegistrySearchResult address={sampleAddress} status="registered" registrationData={null} />
-      );
-
-      expect(screen.getByText('Registered as Stolen')).toBeInTheDocument();
-      expect(screen.queryByText('Registered at block:')).not.toBeInTheDocument();
-    });
+    expect(screen.getByText('Could Not Verify')).toBeInTheDocument();
+    expect(screen.getByText('Unverified')).toBeInTheDocument();
+    expect(screen.queryByText(/Error querying indexer/i)).not.toBeInTheDocument();
   });
 
-  describe('pending status', () => {
-    it('displays pending alert with warning styling', () => {
-      renderWithProviders(
-        <RegistrySearchResult
-          address={sampleAddress}
-          status="pending"
-          acknowledgementData={{
-            trustedForwarder: sampleForwarder,
-            startBlock: 100n,
-            expiryBlock: 200n,
-          }}
-        />
-      );
+  it('never reads as clean, not-found, or unregistered', () => {
+    searchResult.error = new SearchUnavailableError(['wallet', 'contract'], [new Error('down')]);
 
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Pending Registration')).toBeInTheDocument();
-      expect(screen.getByText('In Progress')).toBeInTheDocument();
-    });
+    const { container } = render(<RegistrySearch defaultQuery={ADDRESS} />);
 
-    it('shows acknowledgement details when data is provided', () => {
-      renderWithProviders(
-        <RegistrySearchResult
-          address={sampleAddress}
-          status="pending"
-          acknowledgementData={{
-            trustedForwarder: sampleForwarder,
-            startBlock: 100n,
-            expiryBlock: 200n,
-          }}
-        />
-      );
-
-      expect(screen.getByText('Trusted forwarder:')).toBeInTheDocument();
-      expect(screen.getByText('Grace period starts:')).toBeInTheDocument();
-      expect(screen.getByText(/Block 100/)).toBeInTheDocument();
-      expect(screen.getByText('Expires:')).toBeInTheDocument();
-      expect(screen.getByText(/Block 200/)).toBeInTheDocument();
-    });
-
-    it('renders without acknowledgement data', () => {
-      renderWithProviders(
-        <RegistrySearchResult address={sampleAddress} status="pending" acknowledgementData={null} />
-      );
-
-      expect(screen.getByText('Pending Registration')).toBeInTheDocument();
-      expect(screen.queryByText('Trusted forwarder:')).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not Found')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(AFFIRMATIVE_CLEAN);
+    // The one permitted use of "clean" is the denial itself.
+    expect(screen.getByText(/not.*a clean result/i)).toBeVisible();
   });
 
-  describe('not-found status', () => {
-    it('displays not found alert with success styling', () => {
-      renderWithProviders(<RegistrySearchResult address={sampleAddress} status="not-found" />);
+  it('names the registries that could not be consulted', () => {
+    searchResult.error = new SearchUnavailableError(['contract'], [new Error('down')]);
 
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Not Registered')).toBeInTheDocument();
-      expect(screen.getByText('Clean')).toBeInTheDocument();
-    });
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
 
-    it('indicates wallet is not in registry', () => {
-      renderWithProviders(<RegistrySearchResult address={sampleAddress} status="not-found" />);
-
-      expect(screen.getByText(/is not in the stolen wallet registry/)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/fraudulent contract registry could not be checked/i)).toBeVisible();
   });
 
-  describe('address display', () => {
-    it('displays full address in all status displays', () => {
-      const { rerender } = renderWithProviders(
-        <RegistrySearchResult address={sampleAddress} status="registered" />
-      );
-      // Address should be displayed in full
-      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
+  it('tells an unreachable indexer apart from an identifier the registry cannot represent', () => {
+    // 'unreachable' — the query was sent and failed, so retrying is the right advice.
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('down')], 'unreachable');
+    const { unmount } = render(<RegistrySearch defaultQuery={ADDRESS} />);
+    expect(screen.getByText(/try again/i)).toBeVisible();
+    unmount();
 
-      rerender(
-        <TooltipProvider>
-          <RegistrySearchResult address={sampleAddress} status="pending" />
-        </TooltipProvider>
-      );
-      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
+    // 'unsupported-identifier' — nothing failed and nothing was queried. Telling the user to
+    // retry sends them debugging an indexer that answered perfectly well.
+    searchResult.error = new SearchUnavailableError(['contract'], [], 'unsupported-identifier');
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
 
-      rerender(
-        <TooltipProvider>
-          <RegistrySearchResult address={sampleAddress} status="not-found" />
-        </TooltipProvider>
-      );
-      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
-    });
+    expect(screen.getByText('Could Not Verify')).toBeInTheDocument();
+    expect(screen.getByText(/cannot be queried for this kind of identifier/i)).toBeVisible();
+    expect(screen.queryByText(/try again/i)).not.toBeInTheDocument();
+  });
+
+  it('leaves every other error on the generic error path', () => {
+    searchResult.error = new Error('boom');
+
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText(/Error querying indexer/i)).toBeInTheDocument();
+    expect(screen.queryByText('Could Not Verify')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Finding UI-9: an error and a stale result must not render together ─────────────────────
+//
+// TanStack Query RETAINS `data` from the last successful fetch of a query key when a later
+// background refetch throws. So `data` (stale, from when the registry was reachable) and
+// `error` are both set at once — and `showResult` / `showUnavailable` were not mutually
+// exclusive. The amber "Could Not Verify" card rendered with a green "Clean" card directly
+// beneath it, and a user presented with both reads the reassuring one.
+describe('RegistrySearch — stale data alongside an error', () => {
+  /** What TanStack hands back after a successful fetch that later refetches into an error. */
+  const staleCleanResult = {
+    type: 'address' as const,
+    found: false as const,
+    foundInWalletRegistry: false as const,
+    foundInContractRegistry: false as const,
+    data: null,
+    unverified: [] as const,
+  };
+
+  it('shows only "Could Not Verify" when a refetch throws SearchUnavailableError', () => {
+    searchResult.data = staleCleanResult;
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('fetch failed')]);
+
+    const { container } = render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText('Could Not Verify')).toBeInTheDocument();
+    // The stale green card must be gone entirely — not merely ordered below the amber one.
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not Found')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(AFFIRMATIVE_CLEAN);
+  });
+
+  it('shows no result card when a refetch throws an ordinary error', () => {
+    searchResult.data = staleCleanResult;
+    searchResult.error = new Error('boom');
+
+    const { container } = render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText(/Error querying indexer/i)).toBeInTheDocument();
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(AFFIRMATIVE_CLEAN);
+  });
+
+  it('does not announce a result to screen readers while erroring', () => {
+    // The visual card and the live region are separate render paths; an aria-live
+    // "No match found." is the same false clean, delivered to the user who can least
+    // cross-check it against the amber card.
+    searchResult.data = staleCleanResult;
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('down')]);
+
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.queryByText(/No match found/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/registry was not checked/i)).toBeInTheDocument();
+  });
+
+  it('still renders the result when there is no error', () => {
+    // The exclusion must not be so broad that it swallows ordinary results.
+    searchResult.data = staleCleanResult;
+    searchResult.error = null;
+
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+    expect(screen.queryByText('Could Not Verify')).not.toBeInTheDocument();
   });
 });

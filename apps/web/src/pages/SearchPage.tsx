@@ -5,7 +5,7 @@
  * Includes recent searches stored in localStorage with chain and type info.
  */
 
-import { useState, useCallback, useSyncExternalStore } from 'react';
+import { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import {
@@ -20,7 +20,7 @@ import {
   TooltipContent,
 } from '@swr/ui';
 import { RegistrySearch } from '@/components/composed/RegistrySearch';
-import type { SearchResult as IndexerSearchResult, SearchType } from '@/hooks';
+import { useRegistrySearch, type SearchType } from '@/hooks';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import {
   ArrowRight,
@@ -40,7 +40,17 @@ import { redactAddress } from '@/lib/logger/formatters';
 import { isAddress } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
-const RECENT_SEARCHES_KEY = 'swr-recent-searches';
+// Stored shape: RecentSearch[] (see the type below).
+//
+// The `:v1` suffix exists so that a future change to THAT SHAPE bumps to `:v2` and the old
+// data is simply ignored, rather than being fed to code that can no longer read it. The rule
+// is "bump when the shape changes", not "bump on principle" — a version bump with an
+// unchanged shape only discards data for no benefit.
+//
+// No migration from an earlier key name is provided, and none should be added: the app has
+// never been deployed (local only — no mainnet, no testnet), so there is no stored data
+// anywhere to migrate. Every read/write below goes through this one constant.
+const RECENT_SEARCHES_KEY = 'swr-recent-searches:v1';
 const MAX_RECENT_SEARCHES = 5;
 
 /** Registry entry types */
@@ -273,10 +283,23 @@ export function SearchPage() {
       // Only save address searches to recent (they're the primary use case)
       if (type === 'address' || type === 'caip10') {
         // Extract address from CAIP-10 (format: namespace:chainId:address)
-        const address = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
-        logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
-        saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
-        notifyRecentSearchesChange();
+        const candidate = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
+        // The CAIP-10 split can yield a non-EVM identifier (or nothing useful), and the
+        // recent-search list is keyed by address. Validate rather than assume: an entry that
+        // is not an address cannot be matched against later results anyway.
+        if (isAddress(candidate)) {
+          logger.ui.info('Search initiated from input', {
+            address: redactAddress(candidate),
+            chainId,
+          });
+          saveRecentSearch({
+            address: candidate,
+            chainId,
+            type: 'wallet',
+            resultStatus: 'unknown',
+          });
+          notifyRecentSearchesChange();
+        }
       } else {
         logger.ui.info('Transaction search initiated', { query, type });
       }
@@ -285,18 +308,33 @@ export function SearchPage() {
     [chainId]
   );
 
-  // Handle search result - update the recent search with actual result status
-  const handleResult = useCallback((result: IndexerSearchResult) => {
-    if (result.type === 'address' && result.data) {
+  // Read the result straight from the indexer cache rather than having
+  // RegistrySearch hand it back up: the child searches for exactly this query
+  // (it reports the ENS-resolved address via onSearch), so this hook resolves
+  // from the same TanStack Query entry without a second request.
+  const { data: result } = useRegistrySearch(searchQuery);
+
+  // Backfill the recent-search entry once its real status is known.
+  useEffect(() => {
+    if (!result) return;
+
+    if (result.type === 'address') {
+      // A negative result carries `data: null` by construction, so the address has to come
+      // from the query we searched — the same extraction handleSearch used to key the entry.
+      const candidate = searchQuery.includes(':')
+        ? (searchQuery.split(':')[2] ?? searchQuery)
+        : searchQuery;
+      const address = result.data?.address ?? (isAddress(candidate) ? candidate : undefined);
+      if (!address) return;
       const resultStatus: SearchResultStatus = result.found ? 'registered' : 'clean';
       logger.ui.info('Address search result received', {
-        address: redactAddress(result.data.address),
+        address: redactAddress(address),
         found: result.found,
         foundInWalletRegistry: result.foundInWalletRegistry,
         foundInContractRegistry: result.foundInContractRegistry,
         resultStatus,
       });
-      updateRecentSearchResult(result.data.address, resultStatus);
+      updateRecentSearchResult(address, resultStatus);
       notifyRecentSearchesChange();
     } else if (result.type === 'transaction') {
       logger.ui.info('Transaction search result received', {
@@ -304,6 +342,17 @@ export function SearchPage() {
         chains: result.data?.chains.length ?? 0,
       });
     }
+  }, [result, searchQuery]);
+
+  /**
+   * Clearing the child's input has to clear the query here too.
+   *
+   * `RegistrySearch.handleClear` resets its own state only, so without this the parent kept the
+   * previous query mounted: `useRegistrySearch` stayed live on a search the user had visibly
+   * dismissed, and the backfill effect above kept rewriting its recent-search entry.
+   */
+  const handleClear = useCallback(() => {
+    setSearchQuery('');
   }, []);
 
   // Handle clicking "Check your wallet" quick action
@@ -367,7 +416,7 @@ export function SearchPage() {
             key={searchQuery} // Force re-render when query changes
             defaultQuery={searchQuery}
             onSearch={handleSearch}
-            onResult={handleResult}
+            onClear={handleClear}
           />
         </CardContent>
       </Card>
@@ -393,24 +442,29 @@ export function SearchPage() {
                 const ResultIcon = resultInfo.icon;
 
                 return (
-                  <li key={search.address}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleRecentClick(search)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleRecentClick(search);
-                        }
-                      }}
-                      className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <div className="flex items-center gap-3">
+                  <li key={search.address} className="relative">
+                    <div className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted transition-colors text-left group focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      {/*
+                        Stretched-link pattern: the row-activating control is an
+                        absolutely-positioned button *behind* the content rather
+                        than a role="button" wrapper. Nesting the address link
+                        and the remove button inside an interactive ancestor is
+                        invalid HTML and makes the row unusable with a screen
+                        reader. Content is pointer-events-none so clicks fall
+                        through to the overlay; the two real controls re-enable
+                        pointer events and sit above it via z-index.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => handleRecentClick(search)}
+                        className="absolute inset-0 z-0 rounded-md cursor-pointer focus:outline-none"
+                        aria-label={`Search ${truncateAddress(search.address)}`}
+                      />
+                      <div className="relative z-10 flex items-center gap-3 pointer-events-none">
                         {/* Result status icon */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
+                            <span className="cursor-help pointer-events-auto">
                               <ResultIcon className={`h-4 w-4 ${resultInfo.color}`} />
                             </span>
                           </TooltipTrigger>
@@ -420,7 +474,7 @@ export function SearchPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div
-                              className={`w-2 h-2 rounded-full ${chainInfo.color} cursor-help`}
+                              className={`w-2 h-2 rounded-full ${chainInfo.color} cursor-help pointer-events-auto`}
                             />
                           </TooltipTrigger>
                           <TooltipContent>{chainInfo.name}</TooltipContent>
@@ -428,30 +482,27 @@ export function SearchPage() {
                         {/* Type icon */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
+                            <span className="cursor-help pointer-events-auto">
                               <TypeIcon className="h-4 w-4 text-muted-foreground" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>{typeInfo.label}</TooltipContent>
                         </Tooltip>
                         {/* Address with copy button */}
-                        <ExplorerLink
-                          value={search.address}
-                          type="address"
-                          showDisabledIcon={false}
-                        />
+                        <span className="pointer-events-auto">
+                          <ExplorerLink
+                            value={search.address}
+                            type="address"
+                            showDisabledIcon={false}
+                          />
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="relative z-10 flex items-center gap-2 pointer-events-none">
                         <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                         <button
+                          type="button"
                           onClick={(e) => handleRemoveRecent(search.address, e)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleRemoveRecent(search.address, e);
-                            }
-                          }}
-                          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer pointer-events-auto"
                           aria-label="Remove from recent searches"
                         >
                           <X className="h-3 w-3" />

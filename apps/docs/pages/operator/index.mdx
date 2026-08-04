@@ -44,12 +44,14 @@ Operators are scoped to specific registries via a **capabilities bitmask**. An e
 
 ### Capabilities Bitmask
 
-| Bit    | Constant            | Registry            | Example Use                                    |
+| Value  | Constant            | Registry            | Example Use                                    |
 | ------ | ------------------- | ------------------- | ---------------------------------------------- |
 | `0x01` | `WALLET_REGISTRY`   | Stolen Wallet       | Exchange reporting compromised user accounts   |
 | `0x02` | `TX_REGISTRY`       | Stolen Transaction  | Tracing firms flagging fraudulent transactions |
 | `0x04` | `CONTRACT_REGISTRY` | Fraudulent Contract | Security firms cataloging phishing contracts   |
 | `0x07` | `ALL_REGISTRIES`    | All three           | Full-spectrum fraud intelligence providers     |
+
+`0x07` is the union of all three bits, not a bit of its own.
 
 Capabilities are defined in the `RegistryCapabilities` library - a single source of truth shared across all registry contracts:
 
@@ -70,21 +72,62 @@ All write functions are restricted to `onlyOwner`. The contract owner is the **S
 
 ```solidity
 // Approve a new operator with specified capabilities
+// Setup-only — see Timelocked Governance below
 function approveOperator(
     address operator,
     uint8 capabilities,
     string calldata identifier
-) external onlyOwner;
+) external onlyOwner onlyDuringSetup;
 
-// Revoke an operator (immediate effect)
+// Revoke an operator (immediate, always)
 function revokeOperator(address operator) external onlyOwner;
 
-// Update an operator's capabilities without revoking
+// Change an operator's capabilities
+// Reductions immediate; escalations must take the timelocked path
 function updateCapabilities(
     address operator,
     uint8 capabilities
 ) external onlyOwner;
 ```
+
+## Timelocked Governance
+
+`OperatorRegistry` inherits `TimelockOwnable`. It has two lifecycle phases:
+
+**During setup** (before `completeSetup()`), the immediate setters above work as written — this is deployment and initial wiring.
+
+**After `completeSetup()`**, granting trust takes a two-step path with a mandatory delay:
+
+```solidity
+// 1. Propose — emits ActionProposed(actionKey, activationTime)
+function proposeOperator(address operator, uint8 capabilities, string calldata identifier) external onlyOwner;
+
+// 2. Wait ACTIVATION_DELAY (2 days), then activate within ACTIVATION_EXPIRY (14 days)
+function activateOperator(address operator, uint8 capabilities, string calldata identifier) external onlyOwner;
+
+// Same pair for capability escalation
+function proposeCapabilities(address operator, uint8 capabilities) external onlyOwner;
+function activateCapabilities(address operator, uint8 capabilities) external onlyOwner;
+```
+
+Calling `approveOperator` after setup reverts with `TimelockOwnable__UseTimelockedPath()`. The arguments to `activate*` must match the proposal exactly — the action key is a hash of the function name and every parameter.
+
+| Action                                      | Post-setup path                                         |
+| ------------------------------------------- | ------------------------------------------------------- |
+| Approve a new operator                      | `proposeOperator` → 2 days → `activateOperator`         |
+| **Escalate** capabilities (grant a new bit) | `proposeCapabilities` → 2 days → `activateCapabilities` |
+| **Reduce** capabilities (drop a bit)        | `updateCapabilities` — immediate                        |
+| Revoke an operator                          | `revokeOperator` — immediate                            |
+
+### Why escalation is timelocked but reduction isn't
+
+Anything that only **removes** access is an emergency lever and stays instant. Anything that **grants** access waits.
+
+Without that asymmetry the delay on `approveOperator` would be fully bypassable: approve an operator with a benign capability through the timelocked path, then escalate to `ALL_REGISTRIES` in a single transaction. That would hand out instant access to `ContractRegistry.registerContractsFromOperator` — which is operator-only precisely because it has no two-phase EIP-712 protection.
+
+`updateCapabilities` therefore checks whether the new mask sets any bit the operator does not already hold, and reverts `TimelockOwnable__UseTimelockedPath()` on escalation once setup is complete.
+
+`activateCapabilities` also re-checks approval at activation time: an operator revoked during the 2-day window cannot have capabilities silently restored, which would otherwise defeat the revoke.
 
 ### View Functions
 
@@ -97,6 +140,9 @@ function isApprovedFor(address operator, uint8 registryType) external view retur
 
 // Get full operator data
 function getOperator(address operator) external view returns (Operator memory);
+
+// Get an operator's raw capabilities bitmask
+function getCapabilities(address operator) external view returns (uint8);
 
 // Get total count of approved operators
 function approvedOperatorCount() external view returns (uint256);
@@ -115,8 +161,9 @@ event OperatorCapabilitiesUpdated(address indexed operator, uint8 oldCapabilitie
 <Mermaid
   chart={`
 flowchart TD
-    DAO[DAO Governance] -->|vote passes| Approve[approveOperator]
-    Approve --> Store[Stores approval + capabilities]
+    DAO[DAO Governance] -->|vote passes| Propose[proposeOperator]
+    Propose -->|ACTIVATION_DELAY: 2 days| Activate[activateOperator]
+    Activate --> Store[Stores approval + capabilities]
     Store --> Submit[Operator submits batches]
     Submit --> WR[Wallet Registry]
     Submit --> TR[Transaction Registry]
@@ -138,10 +185,24 @@ The DAO approval process **is** the trust mechanism. An entity approved by gover
 
 ## Error Conditions
 
-| Error                                               | When                                            |
-| --------------------------------------------------- | ----------------------------------------------- |
-| `OperatorRegistry__ZeroAddress()`                   | Operator address is `address(0)`                |
-| `OperatorRegistry__AlreadyApproved()`               | Operator is already approved                    |
-| `OperatorRegistry__NotApproved()`                   | Trying to revoke/update a non-approved operator |
-| `OperatorRegistry__InvalidCapabilities()`           | Capabilities is `0` or exceeds `ALL_REGISTRIES` |
-| `OperatorRegistry__NotAuthorizedForRegistry(uint8)` | Operator lacks required capability bit          |
+| Error                                     | When                                            |
+| ----------------------------------------- | ----------------------------------------------- |
+| `OperatorRegistry__ZeroAddress()`         | Operator address is `address(0)`                |
+| `OperatorRegistry__AlreadyApproved()`     | Operator is already approved                    |
+| `OperatorRegistry__NotApproved()`         | Trying to revoke/update a non-approved operator |
+| `OperatorRegistry__InvalidCapabilities()` | Capabilities is `0` or exceeds `ALL_REGISTRIES` |
+
+An operator that lacks the required capability bit is not rejected here — `isApprovedFor` simply returns `false` and the caller reverts. For batch submissions that surfaces as `OperatorSubmitter__NotApprovedOperator()`.
+
+Inherited from `TimelockOwnable`:
+
+| Error                                     | When                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------- |
+| `TimelockOwnable__UseTimelockedPath()`    | Immediate setter (or capability escalation) called after `completeSetup()` |
+| `TimelockOwnable__NotProposed()`          | Activating an action that was never proposed, or whose arguments differ    |
+| `TimelockOwnable__TooEarly()`             | Activating before the 2-day `ACTIVATION_DELAY` has elapsed                 |
+| `TimelockOwnable__Expired()`              | Activating after the 14-day `ACTIVATION_EXPIRY` window closed — re-propose |
+| `TimelockOwnable__AlreadyPending()`       | Proposing an action that already has a live pending proposal               |
+| `TimelockOwnable__SetupNotComplete()`     | Proposing before `completeSetup()` — the immediate setters are still open  |
+| `TimelockOwnable__SetupAlreadyComplete()` | Calling `completeSetup()` twice                                            |
+| `TimelockOwnable__RenounceDisabled()`     | Attempting to renounce ownership after setup                               |

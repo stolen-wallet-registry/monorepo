@@ -207,8 +207,10 @@ INDEXER (Ponder) → DASHBOARD + SEARCH
 **New P2P protocol:**
 
 1. Add to `PROTOCOLS` in `packages/p2p/src/protocols.ts`
-2. Update Zod schema
-3. Add handler in `useP2PSignatureRelay`
+2. Register its Zod schema in `PROTOCOL_SCHEMAS` (`packages/p2p/src/types.ts`) — `peerGuard`
+   fails closed on any protocol without one
+3. Add the step gate in `apps/web/src/lib/p2p/protocolSteps.ts` (which flow step may receive it)
+4. Register the handler in the P2P page that owns that side of the exchange
 
 **New composed component:**
 

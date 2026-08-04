@@ -203,12 +203,15 @@ export async function setup(
 
   const libp2p = await createLibp2p(config);
 
-  for (const h of handlers) {
-    const { protocol, streamHandler } = h;
-    logger.p2p.debug('Registering protocol handler', { protocol });
-    // In libp2p 3.x, StreamHandler signature is (stream, connection) => void
-    await libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
-  }
+  // Registrations are independent (one per distinct protocol) and none depends on
+  // a previous one's result, so they register concurrently rather than serially.
+  await Promise.all(
+    handlers.map(({ protocol, streamHandler }) => {
+      logger.p2p.debug('Registering protocol handler', { protocol });
+      // In libp2p 3.x, StreamHandler signature is (stream, connection) => void
+      return libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
+    })
+  );
 
   logger.p2p.info('libp2p node created, waiting for relay reservation', {
     peerId: libp2p.peerId.toString(),
@@ -443,9 +446,11 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
     message: data.message,
   });
 
-  // Successful receive proves connection is alive - update store
-  logger.p2p.debug('Marking peer as connected (message received successfully)');
-  useP2PStore.getState().setConnectedToPeer(true);
+  // Deliberately does NOT mark the peer as connected. Parsing proves only that SOMEONE sent
+  // well-formed JSON — this runs before the caller's `acceptStream` check, so treating it as
+  // liveness let any stranger on the public relay flip the victim's UI to "connected" and
+  // overwrite a keep-alive failure that had correctly reported the real partner lost.
+  // `acceptStream` sets it instead, once the sender is known to be the bound partner.
 
   return data;
 };

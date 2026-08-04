@@ -2,30 +2,28 @@ import { createConfig } from 'ponder';
 import {
   WalletRegistryABI,
   TransactionRegistryABI,
-  FraudRegistryHubABI,
   CrossChainInboxABI,
   WalletSoulboundABI,
   SupportSoulboundABI,
-  FeeManagerABI,
   OperatorRegistryABI,
   ContractRegistryABI,
 } from '@swr/abis';
+
+// NOTE: FraudRegistryHub and FeeManager are intentionally NOT registered.
+// They were configured but had zero indexing handlers, so ponder created log filters and
+// fetched + decoded their logs every block for no output. Re-add them together with
+// handlers if their config events (RegistryUpdated / InboxUpdated / FeeRecipientUpdated,
+// BaseFeeUpdated / OperatorBatchFeeUpdated / FallbackPriceUpdated) are ever needed.
 import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
+import { readPonderEnv } from './src/lib/env';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVIRONMENT CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
-// Set PONDER_ENV to switch environments: development | staging | production
-const VALID_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
-const rawEnv = process.env.PONDER_ENV ?? 'development';
-
-if (!VALID_ENVIRONMENTS.includes(rawEnv as Environment)) {
-  throw new Error(
-    `Invalid PONDER_ENV: "${rawEnv}". Must be one of: ${VALID_ENVIRONMENTS.join(', ')}`
-  );
-}
-
-const PONDER_ENV = rawEnv as Environment;
+// Set PONDER_ENV to switch environments: development | staging | production.
+// Validation lives in src/lib/env.ts so the indexing handlers share this exact read rather
+// than casting the raw value and relying on this file having loaded first.
+const PONDER_ENV = readPonderEnv();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTRACT ADDRESSES BY ENVIRONMENT
@@ -166,13 +164,6 @@ export default createConfig({
       address: hubContracts!.stolenTransactionRegistry,
       startBlock: chainConfig.startBlock,
     },
-    FraudRegistryHub: {
-      chain: chainConfig.name,
-      abi: FraudRegistryHubABI,
-      address: hubContracts!.registryHub,
-      startBlock: chainConfig.startBlock,
-    },
-
     // Cross-Chain (from @swr/chains hubContracts)
     CrossChainInbox: {
       chain: chainConfig.name,
@@ -192,14 +183,6 @@ export default createConfig({
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
       address: hubContracts?.supportSoulbound ?? UNDEPLOYED_DUMMY,
-      startBlock: chainConfig.startBlock,
-    },
-
-    // Fee Management (from @swr/chains hubContracts)
-    FeeManager: {
-      chain: chainConfig.name,
-      abi: FeeManagerABI,
-      address: hubContracts!.feeManager,
       startBlock: chainConfig.startBlock,
     },
 

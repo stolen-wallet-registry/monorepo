@@ -26,6 +26,8 @@ export interface LanguageSelectorProps {
   disabled?: boolean;
   /** Additional class names */
   className?: string;
+  /** id applied to the trigger, so an external <label htmlFor> can address it */
+  id?: string;
 }
 
 /**
@@ -42,10 +44,11 @@ export function LanguageSelector({
   onChange,
   disabled = false,
   className,
+  id,
 }: LanguageSelectorProps) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className={className}>
+      <SelectTrigger id={id} className={className}>
         <SelectValue placeholder="Select language" />
       </SelectTrigger>
       <SelectContent>

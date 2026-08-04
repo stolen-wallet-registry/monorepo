@@ -12,27 +12,42 @@ On-chain storage gives you O(1) lookups for a single identifier (`isWalletRegist
 
 ## What Gets Indexed
 
-| Contract Event                 | Table                             | Key Fields                                                             |
-| ------------------------------ | --------------------------------- | ---------------------------------------------------------------------- |
-| `WalletAcknowledged`           | `walletAcknowledgement`           | registeree, trustedForwarder, status, gracePeriodStart, gracePeriodEnd |
-| `WalletRegistered`             | `stolenWallet`                    | address, caip10, registeredAt, isSponsored, reportedChainId            |
-| `BatchCreated`                 | `walletBatch`                     | batchId, operatorId, walletCount, operator                             |
-| `TransactionBatchAcknowledged` | `transactionBatchAcknowledgement` | reporter, trustedForwarder, dataHash, status                           |
-| `TransactionRegistered`        | `transactionInBatch`              | txHash, chainIdHash, caip2ChainId, reporter                            |
-| `TransactionBatchRegistered`   | `transactionBatch`                | batchId, dataHash, transactionCount, isSponsored                       |
-| `TransactionBatchCreated`      | `transactionBatch`                | batchId, operatorId, transactionCount (operator path)                  |
-| `ContractRegistered`           | `fraudulentContract`              | contractAddress, caip2ChainId, batchId, operator                       |
-| `ContractBatchCreated`         | `fraudulentContractBatch`         | batchId, operatorId, contractCount                                     |
-| `CrossChainWalletRegistered`   | `crossChainMessage`               | messageId, sourceChainId, bridgeId, status                             |
-| `WalletRegistrationReceived`   | `crossChainMessage`               | messageId, wallet, sourceChainId                                       |
-| `TransactionBatchReceived`     | `crossChainMessage`               | messageId, dataHash, sourceChainId                                     |
-| `OperatorApproved`             | `operator`                        | identifier, capabilities, approved                                     |
-| `OperatorRevoked`              | `operator`                        | approved=false, revokedAt                                              |
-| `OperatorCapabilitiesUpdated`  | `operatorCapabilityChange`        | oldCapabilities, newCapabilities                                       |
-| `WalletSoulboundMinted`        | `walletSoulboundToken`            | wallet, minter, tokenId                                                |
-| `SupportSoulboundMinted`       | `supportSoulboundToken`           | supporter, amount, tokenId                                             |
+| Contract Event                 | Table                             | Key Fields                                                        |
+| ------------------------------ | --------------------------------- | ----------------------------------------------------------------- |
+| `WalletAcknowledged`           | `walletAcknowledgement`           | registeree, trustedForwarder, isSponsored, status                 |
+| `WalletRegistered`             | `stolenWallet`                    | walletAddress, caip10, registeredAt, isSponsored, reportedChainId |
+| `BatchCreated`                 | `walletBatch`                     | batchId, operatorId, walletCount, operator                        |
+| `TransactionBatchAcknowledged` | `transactionBatchAcknowledgement` | reporter, trustedForwarder, dataHash, status                      |
+| `TransactionRegistered`        | `transactionInBatch`              | txHash, chainIdHash, caip2ChainId, reporter                       |
+| `TransactionBatchRegistered`   | `transactionBatch`                | batchId, dataHash, transactionCount, isSponsored                  |
+| `TransactionBatchCreated`      | `transactionBatch`                | batchId, operatorId, transactionCount (operator path)             |
+| `ContractRegistered`           | `fraudulentContract`              | contractAddress, caip2ChainId, batchId, operator                  |
+| `ContractBatchCreated`         | `fraudulentContractBatch`         | batchId, operatorId, contractCount                                |
+| `CrossChainWalletRegistered`   | `crossChainMessage`               | messageId, sourceChainId, bridgeId, status                        |
+| `WalletRegistrationReceived`   | `crossChainMessage`               | messageId, wallet, sourceChainId                                  |
+| `TransactionBatchReceived`     | `crossChainMessage`               | messageId, dataHash, sourceChainId                                |
+| `OperatorApproved`             | `operator`                        | identifier, capabilities, approved                                |
+| `OperatorRevoked`              | `operator`                        | approved=false, revokedAt                                         |
+| `OperatorCapabilitiesUpdated`  | `operatorCapabilityChange`        | oldCapabilities, newCapabilities                                  |
+| `WalletSoulboundMinted`        | `walletSoulboundToken`            | wallet, minter, tokenId                                           |
+| `SupportSoulboundMinted`       | `supportSoulboundToken`           | supporter, amount, tokenId                                        |
 
 A `registryStats` table tracks global aggregates, updated incrementally on every event.
+
+:::info
+**No grace-period window is indexed.** `walletAcknowledgement` deliberately has no
+`gracePeriodStart` / `gracePeriodEnd` columns and no `expired` status. The contract derives the
+window from `TimingConfig` with a per-acknowledgement random component and does **not** put the
+result on `WalletAcknowledged`, so the indexer cannot know it — the columns that used to exist
+served fabricated `block.number + 5 / + 20` constants to clients. Expiry is a function of the
+current block, so evaluate it against the contract (`deadlines.isExpired`), never against the
+indexer.
+
+Acknowledgement `status` is `pending | registered | superseded`. `registered` means this
+acknowledgement completed its own two-phase flow. `superseded` means the wallet ended up
+registered by another route (usually an operator batch) while the ack was still pending — the
+registration is real, but the registeree never signed the second message.
+:::
 
 ## Search Pipeline
 
@@ -44,15 +59,15 @@ flowchart TD
     B -->|66-char hex| D[Transaction search]
     B -->|Contains ':'| E[CAIP-10 search]
     B -->|*.eth| F[ENS resolution]
+    B -->|Unsupported namespace| U[throw SearchUnavailableError]
     F --> C
     C --> G[Parallel queries]
     G --> H[WALLET_QUERY]
     G --> I[CONTRACT_QUERY]
     D --> J[TRANSACTION_QUERY]
-    E --> K[WALLET_BY_CAIP10_QUERY]
+    E --> G
     H & I --> L[Combine results]
     J --> L
-    K --> L
     L --> M[Display in UI]
 `}
 />
@@ -63,8 +78,59 @@ The frontend determines the query type by format:
 
 - **Address** (42 chars, `0x` prefix) -- Searches both wallet and contract registries in parallel
 - **Transaction hash** (66 chars, `0x` prefix) -- Searches the transaction registry
-- **CAIP-10** (contains `:` separator, e.g., `eip155:8453:0x...`) -- Searches wallets by CAIP-10 string
+- **CAIP-10** (contains `:` separator, e.g., `eip155:8453:0x...`) -- Searches **both** registries, same as the bare-address path (`searchAddressByCAIP10`)
 - **ENS name** (ends with `.eth`) -- Resolves to address first, then searches as address
+- **Unsupported** -- A well-formed identifier in a namespace this registry cannot answer for. **Throws**, see below.
+
+### Fail-Closed Contract (read this before integrating)
+
+`@swr/search` **throws rather than returning a result that reads as "clean."** A negative answer
+is only ever returned when it is a real negative.
+
+```ts
+import { search, SearchUnavailableError, isSearchUnavailableError } from '@swr/search';
+
+try {
+  const result = await search(config, query);
+  if (isCompromised(result)) block();
+  else allow();
+} catch (err) {
+  if (isSearchUnavailableError(err)) {
+    // We do NOT know whether this address is clean. Do not allow on this path.
+    hold(err.unverified); // which registries could not be reached
+  }
+  throw err;
+}
+```
+
+`SearchUnavailableError` carries `unverified` (the registries that could not be consulted) and
+`reason`:
+
+| `reason`                   | Meaning                                                                     |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `'unreachable'`            | The query was sent and failed — indexer down, network error                 |
+| `'unsupported-identifier'` | The registry has no form for this identifier, so there was nothing to query |
+
+It is thrown **only when nothing was found**. A search that gets a hit returns normally, with any
+unreachable registries listed in the result's `unverified` field — a positive result is still
+actionable even if coverage was partial.
+
+:::danger
+The reason this is an exception rather than `{ found: false }`: an integrator writing the obvious
+`if (!isCompromised(r)) allow()` would otherwise clear a withdrawal for an address that nothing
+had actually looked at. `getResultStatus()` would report `not-found` and `isCompromised()` would
+report `false` for a query that never reached a registry.
+:::
+
+A stale indexer has the same shape of hazard — it answers "not found" for everything it has not
+reached yet. Consumers acting on a clean result should check the lag:
+
+```ts
+import { getIndexerStatus, isIndexerStale, DEFAULT_MAX_LAG_SECONDS } from '@swr/search';
+```
+
+The one safe negative-without-a-query is `type: 'invalid'`: the input is not an identifier at
+all, so there is no registry entry it could be missing.
 
 ## Key GraphQL Queries
 
@@ -87,7 +153,10 @@ The frontend determines the query type by format:
 | `RECENT_TRANSACTIONS_QUERY`        | Latest transaction batches (paginated)            |
 | `RECENT_CONTRACTS_QUERY`           | Latest fraudulent contracts (paginated)           |
 | `RECENT_TRANSACTION_ENTRIES_QUERY` | Latest individual transaction entries (paginated) |
+| `RECENT_WALLET_BATCHES_QUERY`      | Latest operator wallet batches (paginated)        |
+| `RECENT_CONTRACT_BATCHES_QUERY`    | Latest operator contract batches (paginated)      |
 | `OPERATORS_LIST_QUERY`             | List operators, filterable by approval status     |
+| `OPERATORS_LIST_ALL_QUERY`         | List operators without the approval filter        |
 
 ### Batch Detail Queries
 
@@ -127,31 +196,59 @@ The `ContractRegistered` event is the exception -- it does include `batchId` on 
 
 The `registryStats` table maintains a single `"global"` row with incrementally updated counters:
 
-| Stat                        | Description                                 |
-| --------------------------- | ------------------------------------------- |
-| `totalWalletRegistrations`  | All registered wallets                      |
-| `totalTransactionBatches`   | Individual + operator transaction batches   |
-| `totalTransactionsReported` | Sum of all tx counts across batches         |
-| `sponsoredRegistrations`    | Registrations where someone else paid gas   |
-| `directRegistrations`       | Computed: total - sponsored                 |
-| `crossChainRegistrations`   | Registrations originating from spoke chains |
-| `walletSoulboundsMinted`    | Wallet attestation NFTs minted              |
-| `supportSoulboundsMinted`   | Donor recognition NFTs minted               |
-| `totalSupportDonations`     | Total wei donated                           |
-| `activeOperators`           | Currently approved operators                |
-| `totalWalletBatches`        | Operator wallet batch submissions           |
-| `totalContractBatches`      | Operator contract batch submissions         |
-| `totalFraudulentContracts`  | Individual fraudulent contracts reported    |
+| Stat                              | Description                                                        |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `totalWalletRegistrations`        | All registered wallets                                             |
+| `totalTransactionBatches`         | Individual + operator transaction batches                          |
+| `totalTransactionsReported`       | Sum of all tx counts across batches                                |
+| `sponsoredRegistrations`          | Registrations where someone else paid gas                          |
+| `directRegistrations`             | Non-sponsored registrations (stored, not derived)                  |
+| `crossChainRegistrations`         | Registrations originating from spoke chains                        |
+| `walletSoulboundsMinted`          | Wallet attestation NFTs minted                                     |
+| `supportSoulboundsMinted`         | Donor recognition NFTs minted                                      |
+| `totalSupportDonations`           | Total wei donated                                                  |
+| `totalOperators`                  | All operator approvals ever granted                                |
+| `activeOperators`                 | Currently approved operators                                       |
+| `totalWalletBatches`              | Operator wallet batch submissions                                  |
+| `totalOperatorTransactionBatches` | Operator transaction batches (subset of `totalTransactionBatches`) |
+| `totalContractBatches`            | Operator contract batch submissions                                |
+| `totalFraudulentContracts`        | Individual fraudulent contracts reported                           |
 
 ## Cross-Chain Message Tracking
 
-The `crossChainMessage` table correlates spoke-to-hub message flow:
+The `crossChainMessage` table correlates spoke-to-hub message flow. There are exactly **two**
+statuses:
 
 ```
-Status: sent → received → registered
+Status: received | registered
 ```
 
-Messages are created when the `CrossChainInbox` receives a Hyperlane message (`WalletRegistrationReceived` or `TransactionBatchReceived`), then updated to `registered` when the corresponding `CrossChainWalletRegistered` or `CrossChainTransactionRegistered` event fires.
+The registry event comes **first**. `CrossChainInbox` emits `WalletRegistrationReceived` /
+`TransactionBatchReceived` only _after_ it has delegated to the registries, so the
+`CrossChainWalletRegistered` / `CrossChainTransactionRegistered` handler runs first and creates
+the row already at `registered`. The inbox handler then runs and fills in what only it knows —
+without ever downgrading a `registered` row back to `received`, which would make a completed
+message look stuck.
+
+Both handlers insert-or-update rather than find-then-update, since either may be the one that
+sees the message first.
+
+:::warning
+**`sourceChainId` may hold a Hyperlane domain, not a chain ID.** The inbox handler only receives
+the Hyperlane `origin` domain; when `@swr/chains` cannot map it to a chain, the raw domain is
+kept (a domain is still a usable correlation key) rather than writing `0`. The two are different
+numbering spaces. Check the `sourceChainIsDomain` flag before rendering this as a chain ID or
+joining against one.
+
+`sourceChainCAIP2` is never ambiguous — it is only written when the chain actually resolved, and
+is `null` otherwise. Prefer it.
+:::
+
+Cross-chain provenance is mirrored onto the entity tables: `stolenWallet` and `transactionBatch`
+both carry `sourceChainId`, `sourceChainCAIP2`, `bridgeId` and `messageId`. All four are `NULL`
+for a locally-registered row, which is how "was this delivered from a spoke?" is answered.
+`TransactionBatchRegistered` carries none of this itself, so the batch handler reads it back off
+the `crossChainMessage` row keyed by `hubTxHash`.
 
 ## Environment Configuration
 
@@ -161,15 +258,28 @@ Messages are created when the `CrossChainInbox` receives a Hyperlane message (`W
 | Staging     | Base Sepolia | 84532    | PostgreSQL          | Alchemy / public RPC    |
 | Production  | Base         | 8453     | PostgreSQL          | Alchemy                 |
 
+The GraphQL API listens on **port 42069** (`http://localhost:42069` in development — the default
+`VITE_INDEXER_URL` for the web app).
+
 Key environment variables:
 
-| Variable           | Purpose                                           |
-| ------------------ | ------------------------------------------------- |
-| `PONDER_ENV`       | `development`, `staging`, or `production`         |
-| `PONDER_RPC_URL_*` | Chain-specific RPC endpoints                      |
-| `DATABASE_URL`     | PostgreSQL connection string (staging/production) |
+| Variable               | Purpose                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `PONDER_ENV`           | `development`, `staging`, or `production`                                       |
+| `PONDER_RPC_URL_*`     | Chain-specific RPC endpoints (**required** for staging/production)              |
+| `PONDER_START_BLOCK_*` | Contract deployment block — **throws** if unset for staging/production          |
+| `DATABASE_URL`         | PostgreSQL connection string — optional in dev, required for staging/production |
+| `DATABASE_SCHEMA`      | Schema name for tooling that reads it directly                                  |
 
-In development, Ponder uses PGlite (an embedded PostgreSQL) so no external database is needed.
+In development, Ponder uses PGlite (an embedded PostgreSQL) when `DATABASE_URL` is unset, so no
+external database is needed. Set `DATABASE_URL` only to run against a real Postgres.
+
+`ponder.config.ts` fails fast rather than misbehaving quietly: for staging and production it
+throws if the RPC URL is missing, if hub contracts are unconfigured in `@swr/chains`, or if the
+start block is `<= 0` — syncing a live chain from block 0 would be extremely slow and costly.
+
+The run scripts pin the schema on the command line: `ponder dev --schema swr_dev` for
+development, `ponder start --schema swr_prod` for production.
 
 ## CAIP-2 Resolution
 

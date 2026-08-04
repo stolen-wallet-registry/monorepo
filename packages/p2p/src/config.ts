@@ -20,7 +20,7 @@ export const RELAY_SERVERS: Record<Environment, RelayConfig[]> = {
     {
       // Ed25519 peer ID format (12D3KooW... prefix) - libp2p 3.x standard
       //
-      // SETUP: Run `pnpm relay:dev` once to generate stable keys.
+      // SETUP: Run `pnpm relay` (from the repo root) once to generate stable keys.
       // The relay prints the multiaddr on startup - copy the peer ID here.
       // Keys are persisted in apps/relay/keys.json for consistent restarts.
       //
@@ -70,22 +70,21 @@ export function getRelayServers(config: EnvironmentConfig): RelayConfig[] {
 
   const servers = RELAY_SERVERS[mode];
 
-  // Fail fast in production if no relay servers are configured
-  if (mode === 'production' && (!servers || servers.length === 0)) {
+  // Fail fast outside development if no relay servers are configured. The development
+  // relay is a localhost multiaddr, so falling back to it in any deployed mode points
+  // users' browsers at their own machine.
+  if (mode !== 'development' && (!servers || servers.length === 0)) {
     throw new RelayConfigurationError(
-      'Production relay servers not configured. ' +
-        'Set VITE_RELAY_MULTIADDR environment variable or add servers to RELAY_SERVERS.production. ' +
-        'Cannot fall back to development relays in production mode.'
+      `Relay servers not configured for ${mode} mode. ` +
+        `Set VITE_RELAY_MULTIADDR environment variable or add servers to RELAY_SERVERS.${mode}. ` +
+        'Cannot fall back to development relays outside development mode.'
     );
   }
 
-  // For non-production, fall back to development servers
-  if (!servers || servers.length === 0) {
-    if (mode !== 'development') {
-      console.warn(`No relay servers configured for ${mode}; falling back to development relays.`);
-    }
-    return RELAY_SERVERS.development;
-  }
+  // Past the guard above, an empty list is only possible in development mode, where the
+  // list IS the development list — there is nothing to fall back to. Returning `servers`
+  // directly avoids a branch that reads as a fallback but can only return what it just
+  // tested.
   return servers;
 }
 

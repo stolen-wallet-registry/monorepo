@@ -19,6 +19,11 @@ interface ISoulboundReceiver {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner sweeps the contract balance
+    /// @param to Recipient of the sweep
+    /// @param amount Amount swept in wei
+    event Swept(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a cross-chain mint is executed
@@ -69,6 +74,9 @@ interface ISoulboundReceiver {
 
     /// @notice Thrown when sender bytes32 has non-zero upper 12 bytes (non-canonical encoding)
     error SoulboundReceiver__NonCanonicalSender();
+
+    /// @notice Thrown when sweeping held ETH to the owner fails
+    error SoulboundReceiver__SweepFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS

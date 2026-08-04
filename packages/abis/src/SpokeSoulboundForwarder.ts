@@ -31,6 +31,36 @@ export const SpokeSoulboundForwarderABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'receive',
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'function',
     name: 'MSG_TYPE_SUPPORT',
     inputs: [],
@@ -65,6 +95,56 @@ export const SpokeSoulboundForwarderABI = [
   },
   {
     type: 'function',
+    name: 'activateHubConfig',
+    inputs: [
+      {
+        name: '_hubDomain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubReceiver',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'bridgeAdapter',
     inputs: [],
     outputs: [
@@ -75,6 +155,26 @@ export const SpokeSoulboundForwarderABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -130,6 +230,44 @@ export const SpokeSoulboundForwarderABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -140,6 +278,37 @@ export const SpokeSoulboundForwarderABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeHubConfig',
+    inputs: [
+      {
+        name: '_hubDomain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubReceiver',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -239,6 +408,19 @@ export const SpokeSoulboundForwarderABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -267,6 +449,70 @@ export const SpokeSoulboundForwarderABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'DonationsWithdrawn',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -376,6 +622,12 @@ export const SpokeSoulboundForwarderABI = [
     anonymous: false,
   },
   {
+    type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
+    anonymous: false,
+  },
+  {
     type: 'error',
     name: 'OwnableInvalidOwner',
     inputs: [
@@ -430,6 +682,51 @@ export const SpokeSoulboundForwarderABI = [
   {
     type: 'error',
     name: 'SpokeSoulboundForwarder__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

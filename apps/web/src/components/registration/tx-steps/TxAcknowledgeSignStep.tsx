@@ -4,7 +4,7 @@
  * Signs the EIP-712 acknowledgement message for transaction batch registration.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
@@ -13,6 +13,7 @@ import { SignatureCard, type SignatureStatus } from '@/components/composed/Signa
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import {
   useSignTxEIP712,
   useTransactionAcknowledgementHashStruct,
@@ -23,7 +24,9 @@ import {
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
+import { SignatureStorageError } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
+import { selectionMatchesSignedBatch } from '@/lib/transactions/selectionConsistency';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import type { Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -51,7 +54,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     txHashesForContract,
     chainIdsForContract,
   } = useTransactionSelection();
-  const { registrationType } = useTransactionRegistrationStore();
+  const { registrationType, setStep } = useTransactionRegistrationStore();
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
 
   const isSelfRelay = registrationType === 'selfRelay';
@@ -102,6 +105,14 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   );
 
   const { signTxAcknowledgement, isPending: isSigning, reset: resetSigning } = useSignTxEIP712();
+
+  // Compared as sets: details are ordered by transaction history, not selection order.
+  // Shared with TxRegisterSignStep rather than inlined — this step carried its own copy, which
+  // then missed the duplicate-signed-hash case the shared predicate now rejects.
+  const selectionIsConsistent = useMemo(
+    () => selectionMatchesSignedBatch(selectedTxHashes, selectedTxDetails),
+    [selectedTxHashes, selectedTxDetails]
+  );
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
@@ -171,11 +182,11 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Set signature state first so UI reflects success even if storage fails.
       setSignature(sig);
-      setSignatureStatus('success');
 
-      // Store signature without letting storage failure discard the signature.
+      // The pay step reads this signature back OUT of sessionStorage, so advancing past a
+      // failed write lands on "signature not found" with nothing explaining why. Report it
+      // here instead — see the same block in `TxRegisterSignStep`.
       try {
         storeTxSignature({
           signature: sig,
@@ -199,7 +210,16 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           { error: storageErr instanceof Error ? storageErr.message : String(storageErr) },
           storageErr instanceof Error ? storageErr : undefined
         );
+        setSignatureError(
+          storageErr instanceof SignatureStorageError
+            ? storageErr.message
+            : sanitizeErrorMessage(storageErr)
+        );
+        setSignatureStatus('error');
+        return;
       }
+
+      setSignatureStatus('success');
 
       logger.registration.info(
         'Transaction batch acknowledgement signing complete, advancing to next step'
@@ -243,12 +263,30 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No transactions selected. Please go back and select transactions to report.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert
+        actionLabel="Back to Selection"
+        onAction={() => setStep('select-transactions')}
+      >
+        No transactions selected. Go back and select the transactions to report.
+      </FlowRecoveryAlert>
+    );
+  }
+
+  // The table below renders `selectedTxDetails`; `selectedTxHashes` is what is hashed into
+  // the signature and submitted on-chain. If those ever disagree, the user is being shown one
+  // set of transactions and asked to sign another — and because the signature over the
+  // mismatched set is genuine, nothing downstream can catch it. The store refuses to rehydrate
+  // a mismatched pair, so reaching here means a live code path broke the invariant. Refuse to
+  // sign rather than sign something the user cannot see.
+  if (!selectionIsConsistent) {
+    return (
+      <FlowRecoveryAlert
+        actionLabel="Back to Selection"
+        onAction={() => setStep('select-transactions')}
+      >
+        The transactions shown do not match the transactions that would be signed. Nothing has been
+        signed. Go back and select your transactions again.
+      </FlowRecoveryAlert>
     );
   }
 

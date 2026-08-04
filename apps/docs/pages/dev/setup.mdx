@@ -6,10 +6,24 @@ Everything you need to run the Stolen Wallet Registry monorepo on your machine.
 
 | Tool       | Version        | Install                                                     |
 | ---------- | -------------- | ----------------------------------------------------------- |
-| Node.js    | 22+            | [nodejs.org](https://nodejs.org)                            |
-| pnpm       | 9+             | `npm install -g pnpm`                                       |
+| Node.js    | 22.x (exactly) | [nodejs.org](https://nodejs.org) — see below                |
+| pnpm       | 10.x           | `corepack enable` (the repo pins `pnpm@10.28.0`)            |
 | Foundry    | Latest         | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
-| PostgreSQL | 15+ (optional) | Required only if running the indexer                        |
+| PostgreSQL | 15+ (optional) | Only for staging/production indexing — dev uses PGlite      |
+
+:::warning
+**Node must be major version 22 — not 23, not 24.** A `preinstall` gate fails the install on
+anything else. The reason is in the gate's own message: Node 24+ ships experimental Web Storage
+that shadows jsdom, and `apps/web/src/test/setup.ts` fails loudly rather than run the test
+suite against the wrong globals.
+
+```bash
+nvm use            # or: nvm install 22 && nvm use 22
+```
+
+The escape hatch is `SWR_SKIP_NODE_CHECK=1 pnpm install`, but the test suite is why the gate
+exists — expect failures if you use it.
+:::
 
 ## Install
 
@@ -19,11 +33,17 @@ cd monorepo
 pnpm install
 ```
 
-Build contracts and generate TypeScript ABIs:
+Build the contracts:
 
 ```bash
 pnpm forge:build
 ```
+
+:::info
+`pnpm forge:build` runs `forge build` only — it does **not** generate the TypeScript ABIs. If
+you have changed any Solidity, regenerate them from the repo root with `pnpm export-abi` (see
+[ABI Regeneration](#abi-regeneration)).
+:::
 
 ## Environment Files
 
@@ -35,7 +55,19 @@ cp apps/indexer/.env.local.example apps/indexer/.env.local
 cp packages/contracts/.env.example packages/contracts/.env
 ```
 
-The web app works out of the box with defaults for local development. The indexer and contracts env files need database and RPC URLs respectively.
+The web app works out of the box with defaults for local development, with one exception:
+`VITE_ALCHEMY_API_KEY` is **required for the Transaction Registry** (it fetches wallet
+transaction history). Everything else is optional.
+
+Two web values are worth knowing up front:
+
+| Variable               | Default                  | Notes                                                  |
+| ---------------------- | ------------------------ | ------------------------------------------------------ |
+| `VITE_INDEXER_URL`     | `http://localhost:42069` | Ponder GraphQL API — the dashboard and search hit this |
+| `VITE_ALCHEMY_API_KEY` | _(unset)_                | Required for the Transaction Registry                  |
+
+The contracts env file needs RPC URLs. The indexer env file needs a `DATABASE_URL` only if you
+want Postgres — see [Running the Indexer](#running-the-indexer).
 
 ## Cross-Chain Development (Recommended)
 
@@ -49,9 +81,14 @@ pnpm anvil:crosschain
 
 Starts three processes:
 
-- **Hub chain** on port 8545 (chain ID 31337, 12s blocks)
-- **Spoke chain** on port 8546 (chain ID 31338, 12s blocks)
+- **Hub chain** on port 8545 (chain ID 31337)
+- **Spoke chain** on port 8546 (chain ID 31338)
 - **Bridge relayer** that auto-relays cross-chain messages
+
+Both chains start at 12s blocks, but `deploy:crosschain` (Terminal 2) switches them to automine
+for the deployment and then restores interval mining at **13s**. That 13s figure is what the
+block-timing config in `@swr/chains` is calibrated against, so it is the rate you actually
+develop at.
 
 :::info
 The Anvil instances load pre-deployed bridge state from `.anvil-state/`. The relayer starts after a 3-second delay to let the chains initialize.
@@ -125,17 +162,27 @@ pnpm dev:web            # Terminal 3
 
 ## Running the Indexer
 
-The Ponder indexer watches on-chain events and provides a GraphQL API for the dashboard.
+The Ponder indexer watches on-chain events and serves the GraphQL API the dashboard, search and
+batch views query. It listens on **port 42069** — the default `VITE_INDEXER_URL`.
 
-Requires PostgreSQL. Set `DATABASE_URL` in `apps/indexer/.env.local`.
+**No database setup is needed for local development.** When `DATABASE_URL` is unset, Ponder uses
+PGlite, an embedded PostgreSQL that stores its data in `apps/indexer/.ponder`. Set `DATABASE_URL`
+in `apps/indexer/.env.local` only if you specifically want to run against a real Postgres;
+staging and production require one.
 
 ```bash
 # Generate types from the Ponder schema
 pnpm indexer:codegen
 
-# Start the indexer
+# Start the indexer (dev mode, schema swr_dev)
 pnpm indexer
+
+# Wipe local PGlite data (after an anvil reset, for example)
+pnpm indexer:wipe
 ```
+
+Anvil resets invalidate the indexer's cached block data, so `pnpm indexer:wipe` is the usual fix
+for a dev indexer that starts throwing after you restart the chains.
 
 ## Running the Relay Server
 
@@ -183,23 +230,37 @@ pnpm storybook
 
 ## Other Commands
 
-| Command               | What it does                                           |
-| --------------------- | ------------------------------------------------------ |
-| `pnpm lint`           | ESLint across all packages                             |
-| `pnpm typecheck`      | TypeScript type checking                               |
-| `pnpm format`         | Prettier + Forge formatter                             |
-| `pnpm check`          | Lint + typecheck + test + format check (CI equivalent) |
-| `pnpm forge:coverage` | Solidity test coverage                                 |
+| Command                  | What it does                                                             |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `pnpm lint`              | ESLint across all packages                                               |
+| `pnpm typecheck`         | TypeScript type checking                                                 |
+| `pnpm format`            | Prettier + Forge formatter                                               |
+| `pnpm check`             | Lint + typecheck + test + format check + syncpack + knip (CI equivalent) |
+| `pnpm forge:coverage`    | Solidity test coverage                                                   |
+| `pnpm seed:transactions` | Seed sample transaction registrations on the local chains                |
+| `pnpm dev:testnet`       | Run the frontend against Base Sepolia / OP Sepolia                       |
+| `pnpm indexer:wipe`      | Delete local PGlite indexer data                                         |
 
 ### ABI Regeneration
 
-After **any** Solidity contract change, regenerate the TypeScript ABI exports:
+After **any** Solidity contract change, regenerate the TypeScript ABI exports **from the repo
+root**:
 
 ```bash
-cd packages/contracts && forge build && pnpm export-abi
+pnpm export-abi
 ```
 
-This reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. Stale ABIs cause silent runtime failures.
+This runs `@swr/contracts#export-abi` through turbo — which builds the contracts first via its
+`dependsOn`, so no separate `forge build` is needed — then formats the output with Prettier. It
+reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. Stale
+ABIs cause silent runtime failures.
+
+:::warning
+Run it from the root, **not** `cd packages/contracts && pnpm export-abi`. The package-level
+script emits raw `JSON.stringify` output while the committed ABIs are Prettier-formatted, so
+running it directly leaves all of `packages/abis/src` dirty with a formatting-only diff and
+fails CI's Prettier check. The root script chains the formatter for you.
+:::
 
 ## Monorepo Structure
 
@@ -217,4 +278,7 @@ packages/p2p       — Shared P2P types + protocols
 packages/cli       — Operator CLI tool
 packages/errors    — Contract error selectors + messages
 packages/caip      — CAIP identifier utilities
+packages/signatures— Shared EIP-712 signature helpers
+packages/formatting— Shared display formatters
+packages/ui        — Shared UI components (own Storybook)
 ```

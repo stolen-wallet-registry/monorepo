@@ -5,6 +5,15 @@ import { getConfig } from '../lib/config.js';
 import { chainIdToBytes32 } from '../lib/caip.js';
 import { WalletRegistryABI, ContractRegistryABI } from '@swr/abis';
 
+/**
+ * CAIP-2 reference the wallet registry actually answers for.
+ *
+ * `eip155:*` is the wildcard form the contract stores (CAIP10.walletKey) and the indexer and
+ * `@swr/search` both mirror — see WalletRegistry.sol's "CAIP-363 wildcard keys for EVM
+ * wallets". The wallet lookup has no chain parameter at all, so this is the honest label.
+ */
+const WILDCARD_CHAIN_REF = 'eip155:*';
+
 export interface VerifyOptions {
   address: string;
   env: 'local' | 'testnet' | 'mainnet';
@@ -65,7 +74,12 @@ export async function verify(options: VerifyOptions): Promise<void> {
 
         console.log(`\n${chalk.bold(registryName)}`);
         console.log(`  Address: ${chalk.cyan(options.address)}`);
-        console.log(`  Chain ID: ${options.chainId}`);
+        // NOT `options.chainId`. `isWalletRegistered(address)` takes no chain argument — the
+        // registry's wallet key is chain-wildcarded, because a wallet marked stolen is stolen
+        // on every EVM chain. Echoing the requested chain here presented a per-chain answer
+        // that was never asked for, so "Chain ID: 1 / Registered: No" read as "clean on
+        // Ethereum" when the query had nothing to do with Ethereum.
+        console.log(`  Chain: ${WILDCARD_CHAIN_REF} (wallet registrations are chain-wide)`);
         console.log(
           `  Registered: ${isRegistered ? chalk.red('YES - STOLEN') : chalk.green('No')}`
         );

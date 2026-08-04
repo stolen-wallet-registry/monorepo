@@ -90,4 +90,26 @@ describe('caip2ToNumericChainId', () => {
     expect(caip2ToNumericChainId('eip155:abc')).toBeNull();
     expect(caip2ToNumericChainId('eip155:')).toBeNull();
   });
+
+  // Regression: this used bare `parseInt`, which stops at the first non-digit and returned
+  // 8453 for 'eip155:8453abc'. Since caip2ToBytes32 uses this as its only validation, a
+  // partially-numeric reference sailed through and got hashed into permanent on-chain storage.
+  it('rejects references that are not a pure decimal integer', () => {
+    expect(caip2ToNumericChainId('eip155:8453abc')).toBeNull();
+    expect(caip2ToNumericChainId('eip155:8453-')).toBeNull();
+    expect(caip2ToNumericChainId('eip155:84_53')).toBeNull();
+    expect(caip2ToNumericChainId('eip155:0x2105')).toBeNull();
+  });
+
+  // The CAIP-2 spec allows alphanumeric references, so the generic format check cannot be the
+  // guard for eip155 — 'eip155:8453abc' is a well-formed CAIP-2 string that is still not a
+  // valid EVM chain reference.
+  it('is stricter than isValidCAIP2 for the eip155 namespace', () => {
+    expect(isValidCAIP2('eip155:8453abc')).toBe(true);
+    expect(caip2ToNumericChainId('eip155:8453abc')).toBeNull();
+  });
+
+  it('rejects a namespace that merely starts with eip155', () => {
+    expect(caip2ToNumericChainId('eip1550:8453')).toBeNull();
+  });
 });

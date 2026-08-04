@@ -6,7 +6,7 @@
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   InputGroup,
   InputGroupAddon,
@@ -15,15 +15,25 @@ import {
   Skeleton,
   Button,
 } from '@swr/ui';
-import { Search, X, Loader2, Wallet, FileText, AlertCircle, AtSign } from 'lucide-react';
+import {
+  Search,
+  X,
+  Loader2,
+  Wallet,
+  FileText,
+  AlertCircle,
+  AtSign,
+  AlertTriangle,
+} from 'lucide-react';
 import {
   useRegistrySearch as useIndexerSearch,
   useEnsResolve,
-  type SearchResult as IndexerSearchResult,
+  useIndexerStatus,
   type SearchType,
 } from '@/hooks';
+import { isSearchUnavailableError } from '@swr/search';
 import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { AddressSearchResult } from './AddressSearchResult';
 import { TransactionSearchResult } from './TransactionSearchResult';
@@ -31,14 +41,34 @@ import { TransactionSearchResult } from './TransactionSearchResult';
 export interface RegistrySearchProps {
   /** Pre-fill query (optional) */
   defaultQuery?: string;
-  /** Called when a search is initiated */
+  /**
+   * Called when a search is initiated, with the query actually sent to the
+   * indexer (ENS names are reported as their resolved address).
+   *
+   * Results are deliberately not handed back: a parent that needs them calls
+   * `useRegistrySearch` with this same query and reads them from the cache.
+   */
   onSearch?: (query: string, type: SearchType) => void;
-  /** Called when search completes with result */
-  onResult?: (result: IndexerSearchResult) => void;
+  /**
+   * Called when the clear button empties the input.
+   *
+   * A parent that mirrors the query (to run its own `useRegistrySearch`, or to drive a
+   * recent-search backfill) has no other way to learn about a clear — this component resets its
+   * own state only, so without this the parent kept the previous query mounted and live.
+   */
+  onClear?: () => void;
   /** Compact mode for header/navbar */
   compact?: boolean;
   /** Additional class names */
   className?: string;
+}
+
+/** Approximate lag in words, for a caveat line rather than a metric. */
+function formatLag(seconds: number): string {
+  if (seconds < 120) return `${seconds} seconds`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 120) return `${minutes} minutes`;
+  return `${Math.round(minutes / 60)} hours`;
 }
 
 /**
@@ -53,6 +83,12 @@ function getSearchTypeIndicator(type: SearchTypeWithEns) {
       return { Icon: AtSign, label: 'ENS name', valid: true };
     case 'transaction':
       return { Icon: FileText, label: 'Valid transaction hash', valid: true };
+    // A well-formed identifier on a chain the registry cannot query. Deliberately not
+    // labelled "invalid": the input is fine, we just have no way to answer for it, and the
+    // search is still allowed through so it surfaces the amber "could not verify" card
+    // rather than a silent nothing.
+    case 'unsupported':
+      return { Icon: AlertCircle, label: 'Unsupported chain — cannot verify', valid: false };
     case 'invalid':
     default:
       return { Icon: AlertCircle, label: 'Invalid input', valid: false };
@@ -66,23 +102,20 @@ function getSearchTypeIndicator(type: SearchTypeWithEns) {
  * @example
  * ```tsx
  * <RegistrySearch
- *   onResult={(result) => console.log('Search result:', result)}
+ *   onSearch={(query, type) => console.log('Searching', type, query)}
  * />
  * ```
  */
 export function RegistrySearch({
   defaultQuery = '',
   onSearch,
-  onResult,
+  onClear,
   compact = false,
   className,
 }: RegistrySearchProps) {
   const [inputValue, setInputValue] = useState(defaultQuery);
   const [searchQuery, setSearchQuery] = useState(defaultQuery);
   const [hasSearched, setHasSearched] = useState(!!defaultQuery);
-
-  // Track which query we've notified for to prevent duplicate callbacks
-  const lastNotifiedQueryRef = useRef<string | null>(null);
 
   // Real-time input type detection (with ENS support)
   const inputType = useMemo(() => detectSearchTypeWithEns(inputValue), [inputValue]);
@@ -108,20 +141,10 @@ export function RegistrySearch({
   // Query the indexer with effective query (empty string when not searching - hook disables itself)
   const indexerQuery = hasSearched ? effectiveSearchQuery : '';
   const { data, isLoading, error } = useIndexerSearch(indexerQuery);
-
-  // Notify parent when result changes (only when user has initiated search)
-  useEffect(() => {
-    if (!hasSearched || !onResult || !data || !effectiveSearchQuery) return;
-    if (lastNotifiedQueryRef.current === effectiveSearchQuery) return;
-
-    lastNotifiedQueryRef.current = effectiveSearchQuery;
-    logger.ui.info('Search result ready', {
-      query: effectiveSearchQuery,
-      type: data.type,
-      found: data.found,
-    });
-    onResult(data);
-  }, [hasSearched, onResult, effectiveSearchQuery, data]);
+  // Only polled once a search has happened — see UseIndexerStatusOptions.enabled. Until then
+  // `stale` reads true (unknown freshness), which is the safe default and unused anyway,
+  // since the caveat only renders alongside a result.
+  const { stale: indexerStale, data: indexerStatus } = useIndexerStatus({ enabled: hasSearched });
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -153,7 +176,6 @@ export function RegistrySearch({
       });
       setSearchQuery(resolvedAddress);
       setHasSearched(true);
-      lastNotifiedQueryRef.current = null;
       onSearch?.(resolvedAddress, 'address');
       return;
     }
@@ -161,7 +183,6 @@ export function RegistrySearch({
     logger.ui.info('Search started', { query: trimmed, type });
     setSearchQuery(trimmed);
     setHasSearched(true);
-    lastNotifiedQueryRef.current = null;
     // Map SearchTypeWithEns to SearchType for callback
     const callbackType: SearchType = type === 'caip10' ? 'caip10' : type;
     onSearch?.(trimmed, callbackType);
@@ -172,7 +193,8 @@ export function RegistrySearch({
     setInputValue('');
     setSearchQuery('');
     setHasSearched(false);
-  }, []);
+    onClear?.();
+  }, [onClear]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -187,8 +209,43 @@ export function RegistrySearch({
   // Determine loading states
   const showLoading = hasSearched && isLoading;
   const showEnsLoading = inputType === 'ens' && isEnsLoading;
-  const showResult = hasSearched && data && !isLoading;
-  const showError = error && !isLoading;
+
+  // `!error` is load-bearing, not defensive tidiness (finding UI-9).
+  //
+  // TanStack Query KEEPS `data` from the last successful fetch of a query key when a later
+  // background refetch throws. So a refetch that raises `SearchUnavailableError` leaves both
+  // `data` (stale, from when the registry was reachable) and `error` set — and these flags
+  // were not mutually exclusive, so the amber "Could Not Verify" card rendered with a stale
+  // green "Clean" card directly beneath it. Presented with both, a user reads the reassuring
+  // one, which is exactly the false clean this whole component is built to prevent.
+  //
+  // An errored query has nothing trustworthy to show. The error surfaces (below) are the
+  // complete answer.
+  const showResult = hasSearched && data && !isLoading && !error;
+
+  // `@swr/search` fails CLOSED: rather than return a result an integrator could read as
+  // "clean", it throws `SearchUnavailableError` when it cannot establish whether an identifier
+  // is registered. TanStack Query hands that back as `error`, but it is not an error in the
+  // sense the generic line below means — the search ran, the registry simply was not checked,
+  // and that is a distinct state the user must be shown as such (audit finding V2). Rendering
+  // it as "Error querying indexer: …" buries the one fact that matters.
+  //
+  // Deliberately narrow: only this error type gets the card. Anything else is a genuine
+  // failure of ours and stays on the generic path, where it is sanitized.
+  const unavailable = error && isSearchUnavailableError(error) ? error : null;
+  const showUnavailable = Boolean(unavailable) && !isLoading;
+  const showError = error && !unavailable && !isLoading;
+
+  // A "not found" is a statement about the blocks the indexer has actually processed. If it
+  // is behind, everything registered in the gap reads as clean, so the caveat belongs next to
+  // the result — only when there is nothing to report, since a hit stands on its own.
+  //
+  // `type: 'invalid'` is excluded: it also carries `found: false`, but nothing was queried, so
+  // indexer lag has no bearing on it. Warning there attaches a scary, irrelevant caveat to what
+  // is really just a typo, and trains people to ignore the warning where it does matter.
+  const showStaleWarning = Boolean(
+    showResult && data && data.type !== 'invalid' && !data.found && indexerStale
+  );
 
   // Can search if input is valid and not loading ENS
   const canSearch = useMemo(() => {
@@ -251,6 +308,10 @@ export function RegistrySearch({
                       ? 'animate-spin text-muted-foreground'
                       : ''
                   )}
+                  // lucide renders a bare <svg>, which has no implicit role, and an aria-label
+                  // on a roleless element is ignored by screen readers. `role="img"` is what
+                  // makes the label announceable.
+                  role="img"
                   aria-label={indicator.label}
                 />
               </InputGroupAddon>
@@ -288,7 +349,10 @@ export function RegistrySearch({
         {/* Error */}
         {showError && (
           <p id="search-error" className="text-sm text-destructive">
-            Error querying indexer: {error.message}
+            {/* graphql-request's ClientError embeds the request and response verbatim, so
+                the raw message is not safe to render. Sanitize like every other error
+                surface; see the V29 tests in @swr/errors. */}
+            Error querying indexer: {sanitizeErrorMessage(error)}
           </p>
         )}
       </div>
@@ -300,6 +364,7 @@ export function RegistrySearch({
         {showResult &&
           data &&
           `Search complete. ${data.found ? 'Match found.' : 'No match found.'}`}
+        {showUnavailable && 'Search could not be completed. The registry was not checked.'}
         {showError && 'Search error occurred.'}
       </div>
 
@@ -311,20 +376,55 @@ export function RegistrySearch({
         </div>
       )}
 
+      {/* Indexer freshness caveat on a negative result */}
+      {showStaleWarning && (
+        <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>
+            {indexerStatus?.lagSeconds != null
+              ? `The indexer is about ${formatLag(indexerStatus.lagSeconds)} behind, so anything registered since then is not reflected here.`
+              : 'The indexer’s progress could not be confirmed, so this result may not reflect recent registrations.'}
+          </span>
+        </p>
+      )}
+
+      {/* Could not verify — an unknown, never an absence. See `unavailable` above. */}
+      {showUnavailable && unavailable && (
+        <AddressSearchResult
+          found={false}
+          foundInWalletRegistry={false}
+          foundInContractRegistry={false}
+          data={null}
+          unverified={unavailable.unverified}
+          reason={unavailable.reason}
+        />
+      )}
+
       {/* Search Results */}
       {showResult && data && (
         <>
-          {data.type === 'address' && (
-            <AddressSearchResult
-              found={data.found}
-              foundInWalletRegistry={data.foundInWalletRegistry}
-              foundInContractRegistry={data.foundInContractRegistry}
-              data={data.data}
-            />
-          )}
-          {data.type === 'transaction' && (
-            <TransactionSearchResult found={data.found} data={data.data} />
-          )}
+          {/* Branch on `found` rather than forwarding fields: the result type and the card's
+              props are both discriminated unions now, so the compiler checks that a positive
+              result carries its data and a negative one carries nothing that could dress it
+              up as something else. */}
+          {data.type === 'address' &&
+            (data.found ? (
+              <AddressSearchResult
+                found
+                foundInWalletRegistry={data.foundInWalletRegistry}
+                foundInContractRegistry={data.foundInContractRegistry}
+                data={data.data}
+                unverified={data.unverified}
+              />
+            ) : (
+              <AddressSearchResult found={false} />
+            ))}
+          {data.type === 'transaction' &&
+            (data.found ? (
+              <TransactionSearchResult found data={data.data} />
+            ) : (
+              <TransactionSearchResult found={false} />
+            ))}
           {data.type === 'invalid' && (
             <p className="text-sm text-muted-foreground">Invalid search input.</p>
           )}

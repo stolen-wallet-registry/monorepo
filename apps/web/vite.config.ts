@@ -18,8 +18,16 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // Polyfill Node.js globals for browser (Buffer, process, etc.)
-    // Required by @hyperlane-xyz/sdk and other Web3 libraries
+    // Polyfill Node.js globals for the browser (Buffer, process).
+    //
+    // These are still load-bearing after the @hyperlane-xyz/sdk removal. Verified against the
+    // installed tree — the real consumers are now the wallet-connector and P2P stacks:
+    //   - @metamask/sdk (via wagmi > @wagmi/connectors): heaviest user, Buffer + process.env
+    //   - @walletconnect/utils and @walletconnect/core (same connector path): Buffer + process
+    //   - @libp2p/crypto, @libp2p/webrtc, libp2p: Buffer in the key/encoding paths
+    //
+    // Do not drop these without re-checking that list; wallet connection and P2P relay both
+    // break at runtime (not at build time) when Buffer/process are missing.
     nodePolyfills({
       include: ['buffer', 'process'],
       globals: {

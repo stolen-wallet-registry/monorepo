@@ -17,10 +17,14 @@ import {
   type RawContractBatchDetailResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
-import { INDEXER_URL } from '@/lib/indexer';
+import {
+  INDEXER_URL,
+  parseIndexerAddress,
+  requireIndexerAddress,
+  requireIndexerHash,
+} from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import type { BatchType } from './useBatches';
-import { isAddress } from 'viem';
 
 function safeBigInt(value: string | number | bigint | null | undefined): bigint {
   if (typeof value === 'bigint') return value;
@@ -35,11 +39,6 @@ function safeBigInt(value: string | number | bigint | null | undefined): bigint 
   return 0n;
 }
 
-function asOptionalAddress(value?: string | null): Address | undefined {
-  if (!value) return undefined;
-  return isAddress(value) ? (value as Address) : undefined;
-}
-
 export interface WalletBatchDetail {
   id: string;
   operatorId: string;
@@ -52,11 +51,22 @@ export interface WalletBatchDetail {
 
 export interface WalletBatchEntry {
   id: string;
+  /** Full bytes32 identifier — NOT an address. Use `walletAddress` to display one. */
   caip10: string;
+  /** EVM address, or undefined for a non-EVM identifier that has no address form. */
+  walletAddress?: string;
   registeredAt: bigint;
   transactionHash: Hash;
   operator?: Address;
   sourceChainCAIP2?: string;
+  /**
+   * The specific chain the theft was reported on.
+   *
+   * Required for the chain badge: `caip10` is stored in the CAIP-2 wildcard form
+   * (`eip155:*:0x…`) because a registered wallet is stolen on every EVM chain, so parsing a
+   * chain out of it yields the literal `*` rather than a chain.
+   */
+  reportedChainCAIP2?: string;
 }
 
 export interface TransactionBatchDetail {
@@ -158,28 +168,38 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           { txHash: batchRes.walletBatch.transactionHash, limit, offset }
         );
 
-        // Derive chain from first entry if batch-level is missing
+        // Derive chain from first entry if batch-level is missing. The `?? undefined` is
+        // load-bearing: GraphQL returns null (not absent) for an unset nullable column, so
+        // `??` alone would fall through to null rather than to the field being omitted.
         const walletReportedChain =
           batchRes.walletBatch.reportedChainCAIP2 ??
-          entriesRes.stolenWallets.items[0]?.reportedChainCAIP2;
+          entriesRes.stolenWallets.items[0]?.reportedChainCAIP2 ??
+          undefined;
 
         const batch: WalletBatchDetail = {
           id: batchRes.walletBatch.id,
           operatorId: batchRes.walletBatch.operatorId,
-          operator: batchRes.walletBatch.operator as Address,
+          operator: requireIndexerAddress(batchRes.walletBatch.operator, 'operator', batchId),
           reportedChainId: walletReportedChain,
           walletCount: batchRes.walletBatch.walletCount,
           registeredAt: safeBigInt(batchRes.walletBatch.registeredAt),
-          transactionHash: batchRes.walletBatch.transactionHash as Hash,
+          transactionHash: requireIndexerHash(
+            batchRes.walletBatch.transactionHash,
+            'transactionHash',
+            batchId
+          ),
         };
 
         const entries = entriesRes.stolenWallets.items.map<WalletBatchEntry>((raw) => ({
           id: raw.id,
           caip10: raw.caip10,
+          walletAddress: raw.walletAddress ?? undefined,
           registeredAt: safeBigInt(raw.registeredAt),
-          transactionHash: raw.transactionHash as Hash,
-          operator: asOptionalAddress(raw.operator),
-          sourceChainCAIP2: raw.sourceChainCAIP2,
+          transactionHash: requireIndexerHash(raw.transactionHash, 'transactionHash', raw.id),
+          operator: parseIndexerAddress(raw.operator),
+          // GraphQL returns null (not absent) for an unset nullable column.
+          sourceChainCAIP2: raw.sourceChainCAIP2 ?? undefined,
+          reportedChainCAIP2: raw.reportedChainCAIP2 ?? undefined,
         }));
 
         return { type: 'wallet', batch, entries };
@@ -210,14 +230,18 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
         const batch: TransactionBatchDetail = {
           id: batchRes.transactionBatch.id,
           dataHash: batchRes.transactionBatch.dataHash,
-          reporter: batchRes.transactionBatch.reporter as Address,
+          reporter: requireIndexerAddress(batchRes.transactionBatch.reporter, 'reporter', batchId),
           reportedChainId: txReportedChain,
           transactionCount: batchRes.transactionBatch.transactionCount,
           isSponsored: batchRes.transactionBatch.isSponsored,
           isOperator: batchRes.transactionBatch.isOperator,
           operatorId: batchRes.transactionBatch.operatorId,
           registeredAt: safeBigInt(batchRes.transactionBatch.registeredAt),
-          transactionHash: batchRes.transactionBatch.transactionHash as Hash,
+          transactionHash: requireIndexerHash(
+            batchRes.transactionBatch.transactionHash,
+            'transactionHash',
+            batchId
+          ),
         };
 
         const entries = entriesRes.transactionInBatchs.items.map<TransactionBatchEntry>((raw) => ({
@@ -225,7 +249,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           txHash: raw.txHash,
           caip2ChainId: raw.caip2ChainId,
           numericChainId: raw.numericChainId,
-          reporter: raw.reporter as Address,
+          reporter: requireIndexerAddress(raw.reporter, 'reporter', raw.id),
           reportedAt: safeBigInt(raw.reportedAt),
         }));
 
@@ -243,18 +267,27 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
       const batch: ContractBatchDetail = {
         id: response.fraudulentContractBatch.id,
         operatorId: response.fraudulentContractBatch.operatorId,
-        operator: response.fraudulentContractBatch.operator as Address,
+        operator: requireIndexerAddress(
+          response.fraudulentContractBatch.operator,
+          'operator',
+          batchId
+        ),
         reportedChainId: response.fraudulentContractBatch.reportedChainCAIP2,
         contractCount: response.fraudulentContractBatch.contractCount,
         registeredAt: safeBigInt(response.fraudulentContractBatch.registeredAt),
-        transactionHash: response.fraudulentContractBatch.transactionHash as Hash,
+        transactionHash: requireIndexerHash(
+          response.fraudulentContractBatch.transactionHash,
+          'transactionHash',
+          batchId
+        ),
       };
 
       const entries = response.fraudulentContracts.items.map<ContractBatchEntry>((raw) => ({
         contractAddress: raw.contractAddress,
         caip2ChainId: raw.caip2ChainId,
         numericChainId: raw.numericChainId,
-        operator: raw.operator as Address,
+        // Contract entries carry no `id` — the contract address is their identity.
+        operator: requireIndexerAddress(raw.operator, 'operator', raw.contractAddress),
         reportedAt: safeBigInt(raw.reportedAt),
       }));
 

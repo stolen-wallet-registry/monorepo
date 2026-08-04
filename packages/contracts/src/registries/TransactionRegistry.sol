@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 
 import { ITransactionRegistry } from "../interfaces/ITransactionRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
@@ -11,6 +12,7 @@ import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { CAIP10 } from "../libraries/CAIP10.sol";
 import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
 import { EIP712Constants } from "../libraries/EIP712Constants.sol";
+import { BatchLimits } from "../libraries/BatchLimits.sol";
 
 /// @title TransactionRegistry
 /// @author Stolen Wallet Registry Team
@@ -20,13 +22,24 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - Chain-qualified reference interface (similar to CAIP-10 but for transactions)
 ///      - Two-phase registration with dataHash commitment
 ///      - Single-phase for operator/cross-chain submissions
-contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
+contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Maximum number of entries in a single operator batch
+    /// @dev A structural ceiling only. At the measured ~26,200 gas/entry a 10,000-entry batch
+    ///      would need ~262M gas, far beyond any block, so operator tooling must chunk well
+    ///      below this. The practical per-transaction limit is {MAX_TWO_PHASE_BATCH_SIZE}.
     uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    /// @notice Maximum number of transactions in a single two-phase (user) batch
+    /// @dev Grounded in the measured ~26,200 gas/entry: 800 entries ≈ 21M gas, which fits a
+    ///      25M-gas block with headroom. Shares `BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE` with
+    ///      `SpokeRegistry` so a batch that is acceptable on a spoke is always executable here
+    ///      after bridging — see `test_GasModel_SupportsMaxCrossChainBatch`, which pins the
+    ///      interaction with `HyperlaneAdapter.MAX_GAS_LIMIT`.
+    uint256 public constant MAX_TWO_PHASE_BATCH_SIZE = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -84,8 +97,12 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     {
         if (_owner == address(0)) revert TransactionRegistry__ZeroAddress();
 
-        // Validate timing
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+        // Validate timing. See {WalletRegistry} for the full derivation: the bound is
+        // `2 * graceBlocks + 1`, not `2 * graceBlocks`, because `resolveWindowBlockHash` requires
+        // `gracePeriodStart <= windowBlock < block.number`, so the earliest block on which
+        // `registerTransactions` can succeed is `gracePeriodStart + 1`. The old `2 * graceBlocks`
+        // bound predates `windowBlock` and admits draws with no usable registration block at all.
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks + 1) {
             revert TransactionRegistry__DeadlineInPast();
         }
 
@@ -120,7 +137,14 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     ///      When hub == address(0), fees are held in this contract and can be recovered
     ///      via withdrawCollectedFees().
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        // Free-registration mode (`feeManager == address(0)`) is a supported deployment shape, so
+        // it must still return anything the caller sent. Returning early WITHOUT refunding skipped
+        // the excess branch below and silently retained the whole `msg.value`, recoverable only by
+        // the owner — every other mode refunds the overpayment.
+        if (feeManager == address(0)) {
+            _refundAll();
+            return;
+        }
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {
@@ -142,6 +166,16 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (!refundSuccess) {
                 revert TransactionRegistry__RefundFailed();
             }
+        }
+    }
+
+    /// @dev Returns the entire `msg.value` to the caller. Used when a batch registers zero
+    ///      effective entries, so there is nothing to charge for. No-op when nothing was sent.
+    function _refundAll() internal {
+        if (msg.value == 0) return;
+        (bool refundSuccess,) = msg.sender.call{ value: msg.value }("");
+        if (!refundSuccess) {
+            revert TransactionRegistry__RefundFailed();
         }
     }
 
@@ -260,46 +294,29 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ITransactionRegistry
-    function generateTransactionHashStruct(
-        bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address trustedForwarder,
+    /// @dev Returns ONLY the deadline. There is deliberately no hash-struct return value.
+    ///      The registration typehashes gained `windowBlockHash` (audit finding V1), and that
+    ///      value is NOT knowable here: the frontend calls this BEFORE signing to obtain the
+    ///      deadline, and resolves the window block later, at signing time. Any digest this
+    ///      function could build for the registration phase would therefore be missing a member
+    ///      the typehash declares — a digest no wallet will ever produce and no verifier will
+    ///      ever accept. It previously returned exactly that, silently. Callers build their own
+    ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
+    ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
+    ///      the caller does not have one at this point in the flow.
+    function getTransactionSignatureDeadline(
+        bytes32, /* dataHash */
+        bytes32, /* reportedChainId */
+        uint32, /* transactionCount */
+        address, /* trustedForwarder */
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct) {
+    )
+        external
+        view
+        returns (uint256 deadline)
+    {
         if (step != 1 && step != 2) revert TransactionRegistry__InvalidStep();
-        deadline = TimingConfig.getSignatureDeadline();
-        if (step == 1) {
-            // Acknowledgement
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.TX_BATCH_ACK_TYPEHASH,
-                    EIP712Constants.TX_ACK_STATEMENT_HASH,
-                    msg.sender, // reporter
-                    trustedForwarder,
-                    dataHash,
-                    reportedChainId,
-                    transactionCount,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        } else {
-            // Registration
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.TX_BATCH_REG_TYPEHASH,
-                    EIP712Constants.TX_REG_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    dataHash,
-                    reportedChainId,
-                    transactionCount,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        }
+        return TimingConfig.getSignatureDeadline();
     }
 
     /// @inheritdoc ITransactionRegistry
@@ -392,9 +409,21 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     ) external {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (trustedForwarder == address(0)) revert TransactionRegistry__ZeroAddress();
-        if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();
+        if (dataHash == bytes32(0)) revert TransactionRegistry__InvalidDataHash();
         if (transactionCount == 0) revert TransactionRegistry__EmptyBatch();
-        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+        // Bound phase 1. Committing a count is not a bound: without this a user could
+        // acknowledge a count too large for phase 2 to fit in a block, then be unable to
+        // complete registration until the acknowledgement expires — having already paid.
+        if (transactionCount > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
+        // Only the forwarder named in the signature may open the window — see
+        // {WalletRegistry.acknowledge} for the timing-grind and nonce-burn rationale.
+        if (msg.sender != trustedForwarder) revert TransactionRegistry__InvalidForwarder();
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+            revert TransactionRegistry__DeadlineTooFarInFuture();
+        }
 
         // Check not already acknowledged
         {
@@ -443,7 +472,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint256 deadline,
         uint256 nonce,
         address reporter,
-        uint32 txCount
+        uint32 txCount,
+        bytes32 windowBlockHash
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -455,20 +485,24 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                 reportedChainId,
                 txCount,
                 nonce,
-                deadline
+                deadline,
+                windowBlockHash
             )
         );
     }
 
-    /// @dev Execute batch registration (state changes)
+    /// @dev Execute batch registration (state changes). Returns the number of entries actually
+    ///      written — zero hashes and already-registered entries are skipped and do not count.
     function _executeTxBatchRegistration(
         address reporter,
         bytes32 dataHash,
         bool isSponsored,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
-    ) internal {
-        uint256 batchId = _nextBatchId++;
+    ) internal returns (uint32) {
+        // Read WITHOUT incrementing. The ID is only committed if at least one entry is written —
+        // see the zero-count branch below.
+        uint256 batchId = _nextBatchId;
 
         // Register transactions, counting actual registrations
         uint32 actualCount = 0;
@@ -490,6 +524,21 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             emit TransactionRegistered(txHash, chainId, reporter, isSponsored);
         }
 
+        // Nothing was written (every hash was zero or already registered), so there is no batch.
+        // Return WITHOUT consuming the ID, writing a row, or emitting the batch event — the same
+        // outcome `registerTransactionsFromOperator` reaches by reverting, reached here without a
+        // revert because the caller's nonce bump and acknowledgement deletion must stand (V8).
+        //
+        // Emitting anyway would produce a batch with transactionCount 0 and no per-entry events
+        // sharing its transaction hash. The indexer joins entries to batches on exactly that hash,
+        // so the row would be a permanent orphan, and the skipped ID a hole in the sequence.
+        if (actualCount == 0) {
+            return 0;
+        }
+
+        // Commit the ID only now that it is backed by at least one entry.
+        _nextBatchId = batchId + 1;
+
         // Write batch after loop with accurate count
         _batches[batchId] = TransactionBatch({
             operatorId: bytes32(0),
@@ -500,6 +549,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         });
 
         emit TransactionBatchRegistered(batchId, reporter, dataHash, actualCount, isSponsored);
+
+        return actualCount;
     }
 
     /// @dev Internal signature verification for registration
@@ -509,12 +560,13 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32 reportedChainId,
         uint256 deadline,
         uint32 txCount,
+        bytes32 windowBlockHash,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) internal view {
         bytes32 structHash = _buildTxBatchRegStructHash(
-            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount
+            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount, windowBlockHash
         );
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, v, r, s);
@@ -529,14 +581,25 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint256 deadline,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (transactionHashes.length == 0) revert TransactionRegistry__EmptyBatch();
+        // Fail-fast only, not a load-bearing bound: phase 1 already enforces
+        // `transactionCount <= MAX_TWO_PHASE_BATCH_SIZE`, and the count-equality check below
+        // means an oversized array could never match. This just gives it a clear error before
+        // hashing the arrays.
+        if (transactionHashes.length > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
-        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+            revert TransactionRegistry__DeadlineTooFarInFuture();
+        }
 
         // Load and validate acknowledgement
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
@@ -548,24 +611,49 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32 dataHash = keccak256(abi.encode(transactionHashes, chainIds));
         if (dataHash != ack.dataHash) revert TransactionRegistry__DataHashMismatch();
 
-        // Validate transactionCount matches acknowledge phase
+        // Validate transactionCount matches acknowledge phase.
+        // TAMPERING signal, not a caller bug: the arrays are internally consistent, they just are
+        // not the batch that was signed for.
         if (ack.transactionCount != uint32(transactionHashes.length)) {
-            revert TransactionRegistry__ArrayLengthMismatch();
+            revert TransactionRegistry__BatchCountMismatch();
         }
+
+        // ANTI-PHISHING: see {WalletRegistry.register}. The signature commits to the hash of a
+        // block at or after the grace period started, so it cannot have been produced in the
+        // same sitting as the acknowledgement.
+        bytes32 windowBlockHash = TimingConfig.resolveWindowBlockHash(windowBlock, ack.gracePeriodStart);
 
         // Verify EIP-712 signature (uses real reportedChainId from ack data)
         _verifyRegistrationSignature(
-            reporter, dataHash, ack.reportedChainId, deadline, uint32(transactionHashes.length), v, r, s
+            reporter,
+            dataHash,
+            ack.reportedChainId,
+            deadline,
+            uint32(transactionHashes.length),
+            windowBlockHash,
+            v,
+            r,
+            s
         );
 
         // === EFFECTS ===
         nonces[reporter]++;
         delete _pendingAcknowledgements[reporter];
 
-        _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);
+        uint32 registeredCount =
+            _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);
 
         // === INTERACTIONS ===
-        _collectFee();
+        // V8: every entry was skipped (zero hash, or already registered by an earlier reporter),
+        // so nothing was written and there is nothing to charge for. Refund instead of reverting:
+        // the nonce bump and acknowledgement deletion above must stand, otherwise the live
+        // acknowledgement would block the reporter from acknowledging a corrected batch until the
+        // window expires (see `acknowledgeTransactions`' already-acknowledged guard).
+        if (registeredCount == 0) {
+            _refundAll();
+        } else {
+            _collectFee();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -589,7 +677,9 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        uint256 batchId = _nextBatchId++;
+        // Read WITHOUT incrementing. The ID is only committed if at least one entry is written —
+        // see the zero-count branch below. Mirrors `_executeTxBatchRegistration`.
+        uint256 batchId = _nextBatchId;
 
         // Register transactions, counting actual registrations
         uint32 actualCount = 0;
@@ -614,6 +704,24 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             emit TransactionRegistered(txHash, chainId, reporter, params.isSponsored);
             emit CrossChainTransactionRegistered(txHash, params.sourceChainId, params.bridgeId, params.messageId);
         }
+
+        // Nothing was written (every hash was zero or already registered), so there is no batch.
+        // Return WITHOUT consuming the ID, writing a row, or emitting the batch event.
+        //
+        // Deliberately NOT a revert: this is a Hyperlane-delivered message, and a reverting
+        // `handle` is redelivered indefinitely. The delivery must succeed and be a no-op.
+        //
+        // Emitting anyway would produce a batch with transactionCount 0 and no per-entry events
+        // sharing its transaction hash. The indexer joins entries to batches on exactly that hash,
+        // so the row would be a permanent orphan, and the skipped ID a hole in the sequence. The
+        // spoke's already-paid fee is the accepted V8 risk documented on
+        // `SpokeRegistry._executeTxBatchRegistration`; it is not made better by a phantom batch.
+        if (actualCount == 0) {
+            return;
+        }
+
+        // Commit the ID only now that it is backed by at least one entry.
+        _nextBatchId = batchId + 1;
 
         // Write batch after loop with accurate count
         _batches[batchId] = TransactionBatch({
@@ -659,10 +767,16 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ITransactionRegistry
-    /// @dev MAX_BATCH_SIZE is enforced only on this operator entry point. The hub-controlled
-    ///      cross-chain path (registerTransactionsFromHub) and the two-phase path (which commits
-    ///      transactionCount upfront and validates matching in phase 2) operate under different
-    ///      constraints and do not need this limit.
+    /// @dev MAX_BATCH_SIZE (the large structural ceiling) is enforced only on this operator
+    ///      entry point, where the submitter is a DAO-approved operator running tooling that
+    ///      chunks the work. The two-phase user path is bounded separately and much lower by
+    ///      MAX_TWO_PHASE_BATCH_SIZE — committing a transactionCount upfront is NOT a bound,
+    ///      which is what an earlier version of this comment incorrectly claimed.
+    ///
+    ///      `registerTransactionsFromHub` is deliberately left unbounded: the spoke enforces
+    ///      `MAX_CROSS_CHAIN_BATCH_SIZE` before the user pays any bridge fee, and a hub-side
+    ///      revert on an already-bridged message would make it permanently undeliverable
+    ///      (Hyperlane retries the identical body forever) rather than merely rejected.
     function registerTransactionsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata transactionHashes,
@@ -697,6 +811,12 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             emit TransactionRegistered(txHash, chainId, address(0), false);
         }
 
+        // Reject a batch in which nothing was actually registered (every entry was a zero hash
+        // or already registered), matching ContractRegistry and WalletRegistry. Otherwise the
+        // operator pays full gas for a no-op, a batch ID is burned, and the indexer
+        // materialises a phantom zero-entry batch with no per-entry events to join against.
+        if (actualCount == 0) revert TransactionRegistry__EmptyBatch();
+
         _batches[batchId] = TransactionBatch({
             operatorId: operatorId,
             dataHash: bytes32(0),
@@ -713,16 +833,57 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ITransactionRegistry
-    function setHub(address newHub) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      `hub` and `operatorSubmitter` are trust boundaries: whoever holds them can write
+    ///      registry entries directly, so post-setup changes go through propose → 2 days →
+    ///      activate, matching FraudRegistryHub and CrossChainInbox.
+    function setHub(address newHub) external onlyOwner onlyDuringSetup {
         if (newHub == address(0)) revert TransactionRegistry__ZeroAddress();
+        _setHub(newHub);
+    }
+
+    /// @notice Propose a hub change (2-day delay before activation)
+    /// @param newHub Address of the new hub
+    function proposeHub(address newHub) external onlyOwner {
+        if (newHub == address(0)) revert TransactionRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setHub", newHub)));
+    }
+
+    /// @notice Activate a previously proposed hub change
+    /// @param newHub Address of the new hub
+    function activateHub(address newHub) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setHub", newHub)));
+        _setHub(newHub);
+    }
+
+    /// @inheritdoc ITransactionRegistry
+    /// @dev Immediate during initial setup, timelocked after completeSetup()
+    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner onlyDuringSetup {
+        if (newOperatorSubmitter == address(0)) revert TransactionRegistry__ZeroAddress();
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    /// @notice Propose an operator submitter change (2-day delay before activation)
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function proposeOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        if (newOperatorSubmitter == address(0)) revert TransactionRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+    }
+
+    /// @notice Activate a previously proposed operator submitter change
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function activateOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    function _setHub(address newHub) internal {
         address oldHub = hub;
         hub = newHub;
         emit HubUpdated(oldHub, newHub);
     }
 
-    /// @inheritdoc ITransactionRegistry
-    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
-        if (newOperatorSubmitter == address(0)) revert TransactionRegistry__ZeroAddress();
+    function _setOperatorSubmitter(address newOperatorSubmitter) internal {
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);

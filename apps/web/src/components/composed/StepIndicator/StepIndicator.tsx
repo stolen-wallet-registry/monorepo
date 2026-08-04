@@ -10,12 +10,6 @@ import { cn } from '@/lib/utils';
 import type { RegistrationStep, RegistrationType } from '@/stores/registrationStore';
 import { STEP_SEQUENCES } from '@/stores/registrationStore';
 
-export interface StepConfig {
-  id: RegistrationStep;
-  label: string;
-  description?: string;
-}
-
 export type StepStatus = 'pending' | 'current' | 'completed';
 
 export interface StepIndicatorProps {

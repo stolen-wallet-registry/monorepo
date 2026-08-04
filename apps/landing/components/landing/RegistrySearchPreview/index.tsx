@@ -22,6 +22,7 @@ import {
 } from '@swr/ui';
 import {
   search,
+  isSearchUnavailableError,
   getResultStatus,
   getStatusLabel,
   getStatusDescription,
@@ -60,8 +61,11 @@ const searchConfig: SearchConfig = {
 
 /**
  * Get background color class based on status.
+ *
+ * Module-private: nothing outside this file consumes it, and exporting a
+ * non-component alongside components breaks Fast Refresh for the whole module.
  */
-export function getResultBgClass(status: ResultStatus): string {
+function getResultBgClass(status: ResultStatus): string {
   switch (status) {
     case 'registered':
       return 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900';
@@ -69,6 +73,10 @@ export function getResultBgClass(status: ResultStatus): string {
       return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-900';
     case 'not-found':
       return 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900';
+    case 'unverified':
+      // Deliberately not green: a registry that did not answer is an unknown, and showing
+      // the clean styling for it is how someone concludes a stolen wallet is safe.
+      return 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900';
   }
 }
 
@@ -83,6 +91,8 @@ function StatusIcon({ status }: { status: ResultStatus }) {
       return <LinkIcon className="h-4 w-4 text-yellow-500" />;
     case 'not-found':
       return <CheckCircle className="h-4 w-4 text-green-500" />;
+    case 'unverified':
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
   }
 }
 
@@ -96,6 +106,7 @@ function createStubbedWalletResult(address: string): SearchResult {
   return {
     type: 'address',
     found: true,
+    unverified: [],
     foundInWalletRegistry: true,
     foundInContractRegistry: false,
     data: {
@@ -117,6 +128,7 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   return {
     type: 'transaction',
     found: true,
+    unverified: [],
     data: {
       txHash: txHash.toLowerCase() as `0x${string}`,
       chains: [
@@ -134,17 +146,14 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   };
 }
 
-function createStubbedNotFoundAddressResult(address: string): SearchResult {
+function createStubbedNotFoundAddressResult(): SearchResult {
   return {
     type: 'address',
     found: false,
+    unverified: [],
     foundInWalletRegistry: false,
     foundInContractRegistry: false,
-    data: {
-      address: address.toLowerCase() as `0x${string}`,
-      wallet: null,
-      contract: null,
-    },
+    data: null,
   };
 }
 
@@ -152,6 +161,7 @@ function createStubbedCleanTransactionResult(_txHash: string): SearchResult {
   return {
     type: 'transaction',
     found: false,
+    unverified: [],
     data: null,
   };
 }
@@ -160,6 +170,7 @@ function createStubbedContractResult(address: string): SearchResult {
   return {
     type: 'address',
     found: true,
+    unverified: [],
     foundInWalletRegistry: false,
     foundInContractRegistry: true,
     data: {
@@ -219,7 +230,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           setResult(createStubbedWalletResult(trimmed));
           return;
         case 'clean-wallet':
-          setResult(createStubbedNotFoundAddressResult(trimmed));
+          setResult(createStubbedNotFoundAddressResult());
           return;
         case 'reported-tx':
           setResult(createStubbedTransactionResult(trimmed));
@@ -231,7 +242,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           setResult(createStubbedContractResult(trimmed));
           return;
         case 'clean-contract':
-          setResult(createStubbedNotFoundAddressResult(trimmed));
+          setResult(createStubbedNotFoundAddressResult());
           return;
       }
     }
@@ -258,11 +269,25 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
       if (latestQueryRef.current !== trimmed) return;
 
       console.error('Registry search failed:', err);
-      setError('Failed to search registry. Please try again.');
+      // Say what the failure means, not just that it happened. A visitor who reads
+      // "search failed" and moves on has effectively been told "clean" — which is the one
+      // conclusion an unreachable registry does not support.
+      setError(
+        isSearchUnavailableError(err)
+          ? 'The registry could not be reached, so this address could not be checked. This is not a clean result — please try again.'
+          : 'Failed to search registry. Please try again.'
+      );
       setResult(null);
     } finally {
-      // Only clear loading if this is still the latest query
+      // Only clear loading if this is still the latest query.
+      //
+      // The reset IS in a finally and is reached from both the success and the
+      // catch path, so the flag cannot stick. The rule fires on the guard, but
+      // the guard is the point: when a newer search has superseded this one,
+      // that newer run owns the spinner. Clearing it here unconditionally would
+      // stop the spinner while a search is still in flight.
       if (latestQueryRef.current === trimmed) {
+        // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
         setIsLoading(false);
       }
     }

@@ -24,6 +24,7 @@ import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBou
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useRegistrySearch } from '@/hooks/indexer';
 
 /**
@@ -69,7 +70,9 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
 
 export function StandardRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
+  const { address } = useAccount();
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
@@ -88,13 +91,6 @@ export function StandardRegistrationPage() {
     }
   }, [registrationType, setRegistrationType]);
 
-  // Redirect if not connected (side effect in useEffect, not during render)
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
-
   // Redirect if connected wallet is already registered (can't register same wallet twice)
   useEffect(() => {
     if (!isCheckingRegistration && connectedWalletRegistered && step !== 'success') {
@@ -102,7 +98,7 @@ export function StandardRegistrationPage() {
     }
   }, [isCheckingRegistration, connectedWalletRegistered, step, setLocation]);
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

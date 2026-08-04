@@ -73,6 +73,20 @@ describe('caip2ToBytes32', () => {
     expect(caip2ToBytes32('eip155:8453')).toBe(chainIdToBytes32(8453));
     expect(caip2ToBytes32('eip155:1')).toBe(chainIdToBytes32(1));
   });
+
+  // Regression: validation used to accept a partially-numeric reference (parseInt stops at
+  // the first non-digit), and the function then hashed the CALLER'S string rather than the
+  // canonical form. 'eip155:8453abc' therefore produced a bytes32 belonging to no chain,
+  // written to permanent on-chain storage where it can never be corrected.
+  it('rejects a partially-numeric chain reference', () => {
+    expect(() => caip2ToBytes32('eip155:8453abc')).toThrow('Unsupported or invalid CAIP-2 format');
+  });
+
+  // Hashing is done over the canonical `eip155:<n>` form, so non-canonical spellings can
+  // never silently derive a different storage key than the chain they name.
+  it('normalizes non-canonical spellings to the canonical hash', () => {
+    expect(caip2ToBytes32('eip155:08453')).toBe(chainIdToBytes32(8453));
+  });
 });
 
 describe('contract compatibility', () => {

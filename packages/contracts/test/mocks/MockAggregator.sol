@@ -10,6 +10,8 @@ contract MockAggregator {
     int256 public price;
     uint256 public updatedAt;
     bool public shouldRevert;
+    uint8 public decimalsValue = 8;
+    bool public decimalsShouldRevert;
 
     constructor(int256 _price) {
         price = _price;
@@ -29,6 +31,14 @@ contract MockAggregator {
         shouldRevert = _shouldRevert;
     }
 
+    function setDecimals(uint8 _decimals) external {
+        decimalsValue = _decimals;
+    }
+
+    function setDecimalsShouldRevert(bool _shouldRevert) external {
+        decimalsShouldRevert = _shouldRevert;
+    }
+
     function latestRoundData()
         external
         view
@@ -38,8 +48,9 @@ contract MockAggregator {
         return (0, price, 0, updatedAt, 0);
     }
 
-    function decimals() external pure returns (uint8) {
-        return 8;
+    function decimals() external view returns (uint8) {
+        if (decimalsShouldRevert) revert OracleCallFailed();
+        return decimalsValue;
     }
 
     function description() external pure returns (string memory) {

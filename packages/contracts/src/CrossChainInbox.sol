@@ -43,6 +43,11 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner sweeps ETH a misbehaving hook forwarded with a message
+    /// @param to Recipient of the sweep
+    /// @param amount Amount swept in wei
+    event Swept(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a wallet registration is received and processed
@@ -66,6 +71,13 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @param trusted Whether the source is now trusted
     event TrustedSourceUpdated(uint32 indexed chainId, bytes32 indexed spokeRegistry, bool trusted);
 
+    /// @notice Emitted when an already-processed message is delivered again and skipped
+    /// @dev Not an error: a bridge retry or a second bridge delivering the same logical event is
+    ///      expected, and the correct response is to no-op so the message stops being retried.
+    /// @param origin The origin chain domain ID
+    /// @param messageId The canonical message ID that was already processed
+    event DuplicateMessageIgnored(uint32 indexed origin, bytes32 indexed messageId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -75,7 +87,7 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     error CrossChainInbox__UntrustedSource();
     error CrossChainInbox__SourceChainMismatch();
     error CrossChainInbox__UnknownMessageType();
-    error CrossChainInbox__DuplicateMessage();
+    error CrossChainInbox__SweepFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -110,13 +122,29 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Handle incoming cross-chain message from Hyperlane
-    /// @dev The messageId is computed from canonical re-encoding of decoded fields (not raw bytes).
-    ///      This prevents trailing-bytes attacks where a bridge appends extra data to bypass dedup.
-    ///      To correlate with Hyperlane's native ID, index Mailbox.Dispatch events on the source chain.
+    /// @dev The messageId is computed from a canonical re-encoding of the decoded fields (not the
+    ///      raw bytes). This prevents trailing-bytes attacks where a bridge appends extra data to
+    ///      bypass dedup. To correlate with Hyperlane's native ID, index Mailbox.Dispatch events
+    ///      on the source chain.
+    ///
+    ///      `_origin` and `_sender` are part of the preimage. Without them the ID is a pure
+    ///      function of publicly-predictable payload contents, so anyone able to get ANY trusted
+    ///      source to deliver the same logical payload first could burn the ID and permanently
+    ///      strand the genuine message. Including the route also keeps the same logical event
+    ///      delivered by two different bridges from colliding.
+    ///
+    ///      A duplicate is a NO-OP, not a revert. Registration is idempotent by nature (the
+    ///      registries skip already-registered entries), and Hyperlane retries a failed delivery
+    ///      with the identical message body forever — so reverting turns an ordinary retry, or a
+    ///      second bridge delivering the same event, into a permanently undeliverable message
+    ///      with the user's bridge fee already spent.
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _messageBody Encoded payload
-    function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external onlyMailbox {
+    /// @dev `payable` because IMessageRecipient.handle is payable from Hyperlane v3; the mailbox
+    ///      forwards whatever msgValue the message's hook metadata requested. Our dispatches always
+    ///      set msgValue to 0, so any value received here is unexpected and simply ignored.
+    function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external payable onlyMailbox {
         // Validate source is trusted
         if (!_trustedSources[_origin][_sender]) {
             revert CrossChainInbox__UntrustedSource();
@@ -128,14 +156,20 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
         if (msgType == CrossChainMessage.MSG_TYPE_WALLET) {
             CrossChainMessage.WalletRegistrationPayload memory wp =
                 CrossChainMessage.decodeWalletRegistration(_messageBody);
-            bytes32 messageId = keccak256(abi.encode(wp));
-            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            bytes32 messageId = keccak256(abi.encode(_origin, _sender, wp));
+            if (_processedMessages[messageId]) {
+                emit DuplicateMessageIgnored(_origin, messageId);
+                return;
+            }
             _processedMessages[messageId] = true;
             _handleWalletRegistration(_origin, wp, messageId);
         } else if (msgType == CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH) {
             CrossChainMessage.TransactionBatchPayload memory tp = CrossChainMessage.decodeTransactionBatch(_messageBody);
-            bytes32 messageId = keccak256(abi.encode(tp));
-            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            bytes32 messageId = keccak256(abi.encode(_origin, _sender, tp));
+            if (_processedMessages[messageId]) {
+                emit DuplicateMessageIgnored(_origin, messageId);
+                return;
+            }
             _processedMessages[messageId] = true;
             _handleTransactionBatch(_origin, tp, messageId);
         } else {
@@ -205,11 +239,18 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set trusted source (immediate — only during initial setup)
+    /// @notice Trust or un-trust a spoke registry as a source of cross-chain registrations
+    /// @dev Granting trust is timelocked after setup (it widens who can write to the hub);
+    ///      revoking stays immediate, mirroring HyperlaneAdapter.setAuthorizedSender. A trusted
+    ///      source's messages reach WalletRegistry.registerFromHub, which performs no signature
+    ///      check — so cutting off a compromised spoke must not require a 2-day wait, during
+    ///      which the only alternative lever is the global pause that also kills every honest
+    ///      spoke.
     /// @param chainId Hyperlane domain ID
     /// @param spokeRegistry Spoke registry address (as bytes32)
     /// @param trusted Whether the source is trusted
-    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner onlyDuringSetup {
+    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
+        if (trusted && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
@@ -234,6 +275,24 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
         _activateAction(key);
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
+    }
+
+    /// @notice Recover ETH held by this contract
+    /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
+    ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
+    ///      be locked forever.
+    ///
+    ///      Takes an explicit recipient rather than paying `msg.sender`. After the DAO handover
+    ///      the owner is a multisig or Governor, and a plain `call` to a contract whose fallback
+    ///      is non-payable or gas-limited reverts — leaving the funds unrecoverable with no
+    ///      alternative destination.
+    /// @param to Recipient of the swept balance
+    function sweep(address to) external onlyOwner {
+        if (to == address(0)) revert CrossChainInbox__ZeroAddress();
+        uint256 amount = address(this).balance;
+        (bool success,) = to.call{ value: amount }("");
+        if (!success) revert CrossChainInbox__SweepFailed();
+        emit Swept(to, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm } from "forge-std/Test.sol";
 import { TransactionRegistry } from "../src/registries/TransactionRegistry.sol";
 import { ITransactionRegistry } from "../src/interfaces/ITransactionRegistry.sol";
 import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
 import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
+import { TimingConfig } from "../src/libraries/TimingConfig.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title TransactionRegistryTest
 /// @notice Comprehensive tests for TransactionRegistry two-phase batch registration
@@ -54,8 +56,11 @@ contract TransactionRegistryTest is EIP712TestHelper {
         "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
+    // NOTE: the registration typehash commits to `windowBlockHash` — the hash of a block at or
+    // after `gracePeriodStart`. That block does not exist at acknowledgement time, so the
+    // registration signature is unproducible in the same sitting (anti-phishing, V1 fix).
     bytes32 internal constant PROD_TX_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -153,7 +158,16 @@ contract TransactionRegistryTest is EIP712TestHelper {
         (v, r, s) = vm.sign(privateKey, digest);
     }
 
+    /// @notice Block whose hash the next registration signature commits to.
+    /// @dev Passed via state rather than as an extra parameter to the registration signing
+    ///      helpers. The registration struct now encodes 9 fields, and these helpers are called
+    ///      from test bodies that already carry many locals; an additional parameter pushes the
+    ///      call over the EVM's 16-slot stack limit (this project builds WITHOUT via-ir).
+    ///      Callers set `_sigWindowBlock = windowBlock;` immediately before signing.
+    uint256 internal _sigWindowBlock;
+
     /// @notice Sign a transaction batch registration using production constants
+    /// @dev Commits to `blockhash(_sigWindowBlock)` — see {_sigWindowBlock}.
     function _signProdTxReg(
         uint256 privateKey,
         address _reporter,
@@ -174,7 +188,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
                 reportedChainId,
                 transactionCount,
                 nonce,
-                deadline
+                deadline,
+                blockhash(_sigWindowBlock)
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _prodDomainSeparator(), structHash));
@@ -232,11 +247,11 @@ contract TransactionRegistryTest is EIP712TestHelper {
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
-        // Advance past grace period
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            txRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        // Advance past grace period. _rollToWindow rolls to gracePeriodStart + 1 and returns
+        // gracePeriodStart, which satisfies both windowBlock >= graceStart and windowBlock < block.number.
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) = _signProdTxReg(
             reporterPrivateKey,
             reporter,
@@ -249,7 +264,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         );
 
         vm.prank(_forwarder);
-        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -353,11 +368,14 @@ contract TransactionRegistryTest is EIP712TestHelper {
     }
 
     /// @notice Reverts when dataHash is bytes32(0)
+    /// @dev Expects `__InvalidDataHash` (a CALLER BUG — nothing has been acknowledged yet, so
+    ///      there is nothing to have tampered with), NOT `__DataHashMismatch`, which is reserved
+    ///      for a phase-2 batch that differs from the acknowledged one.
     function test_TxAck_RejectsZeroDataHash() public {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint256 deadline = block.timestamp + 3600;
 
-        vm.expectRevert(ITransactionRegistry.TransactionRegistry__DataHashMismatch.selector);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidDataHash.selector);
         vm.prank(forwarder);
         txRegistry.acknowledgeTransactions(
             reporter, forwarder, deadline, bytes32(0), reportedChainId, 3, 27, bytes32(0), bytes32(0)
@@ -428,13 +446,12 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doAcknowledge(forwarder, txHashes, chainIds);
 
         // Advance past grace period
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            txRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         // Prepare registration signature
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
 
@@ -450,7 +467,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
         // Phase 2: Register
         vm.prank(forwarder);
-        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
 
         // Verify transactions are registered
         for (uint256 i = 0; i < txHashes.length; i++) {
@@ -480,15 +497,18 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
         _doAcknowledge(forwarder, txHashes, chainIds);
 
-        // Do NOT advance blocks — still in grace period
+        // Do NOT advance blocks — still in grace period. The grace-period check fires before
+        // the window-block resolution, so any already-mined windowBlock is fine here.
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
+        uint256 windowBlock = block.number - 1;
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__GracePeriodNotStarted.selector);
         vm.prank(forwarder);
-        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
     /// @notice Reverts when registration attempted after deadline expires
@@ -506,12 +526,16 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
+        // Block-based expiry is checked before window-block resolution, so gracePeriodStart
+        // remains a valid windowBlock choice here.
+        uint256 windowBlock = ack.gracePeriodStart;
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__DeadlineExpired.selector);
         vm.prank(forwarder);
-        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
     /// @notice Reverts when msg.sender is not the authorized forwarder
@@ -523,22 +547,21 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doAcknowledge(forwarder, txHashes, chainIds);
 
         // Advance past grace period
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            txRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         address wrongForwarder = makeAddr("wrongForwarder");
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         // Sign with wrongForwarder as the forwarder in the sig (matching msg.sender)
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) = _signProdTxReg(
             reporterPrivateKey, reporter, wrongForwarder, dataHash, reportedChainId, 3, nonce, deadline
         );
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidForwarder.selector);
         vm.prank(wrongForwarder);
-        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
     /// @notice Reverts when submitted transaction data does not match acknowledged dataHash
@@ -549,9 +572,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doAcknowledge(forwarder, txHashes, chainIds);
 
         // Advance past grace period
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            txRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         // Tamper with the data — different tx hashes than acknowledged
         bytes32[] memory differentTxHashes = new bytes32[](3);
@@ -563,19 +584,20 @@ contract TransactionRegistryTest is EIP712TestHelper {
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) = _signProdTxReg(
             reporterPrivateKey, reporter, forwarder, differentDataHash, reportedChainId, 3, nonce, deadline
         );
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__DataHashMismatch.selector);
         vm.prank(forwarder);
-        txRegistry.registerTransactions(reporter, deadline, differentTxHashes, chainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, differentTxHashes, chainIds, windowBlock, v, r, s);
     }
 
     /// @notice Reverts when submitted arrays differ from what was acknowledged.
     /// @dev The contract computes dataHash from submitted arrays. Changing the array
     ///      length changes the dataHash, so DataHashMismatch fires before the
-    ///      transactionCount check (ArrayLengthMismatch). This is the correct
+    ///      transactionCount check (BatchCountMismatch). This is the correct
     ///      defense-in-depth: any data tampering is caught by the hash commitment.
     function test_TxReg_RejectsCountMismatch() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
@@ -584,9 +606,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doAcknowledge(forwarder, txHashes, chainIds);
 
         // Advance past grace period
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            txRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         // Submit only 2 transactions (count mismatch → dataHash mismatch)
         bytes32[] memory fewerTxHashes = new bytes32[](2);
@@ -601,13 +621,211 @@ contract TransactionRegistryTest is EIP712TestHelper {
         uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
+        _sigWindowBlock = windowBlock;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 2, nonce, deadline);
 
         // DataHashMismatch fires first because keccak256(abi.encode(2 items)) != keccak256(abi.encode(3 items))
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__DataHashMismatch.selector);
         vm.prank(forwarder);
-        txRegistry.registerTransactions(reporter, deadline, fewerTxHashes, fewerChainIds, v, r, s);
+        txRegistry.registerTransactions(reporter, deadline, fewerTxHashes, fewerChainIds, windowBlock, v, r, s);
+    }
+
+    /// @notice A pure count discrepancy reverts with `__BatchCountMismatch`, NOT `__DataHashMismatch`.
+    /// @dev This is the discrimination test for the error split, and the only way to reach the
+    ///      count check at all. Phase 1 accepts `dataHash` and `transactionCount` as independent
+    ///      arguments, so an acknowledgement can commit the hash of the real 3-item batch while
+    ///      committing a count of 2. Phase 2 then submits the genuine arrays: the hash commitment
+    ///      is satisfied — proving DataHashMismatch is not what fires — and the count is the only
+    ///      thing wrong. Without the split, the frontend would see one error here and at
+    ///      {test_TxReg_RejectsCountMismatch} and could not tell the two apart.
+    function test_TxReg_CountMismatchIsDistinctFromDataHashMismatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+
+        // Acknowledge the REAL dataHash but a WRONG transactionCount (2, not 3).
+        {
+            uint256 ackNonce = txRegistry.nonces(reporter);
+            uint256 ackDeadline = block.timestamp + 3600;
+            (uint8 av, bytes32 ar, bytes32 ass) = _signProdTxAck(
+                reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 2, ackNonce, ackDeadline
+            );
+            vm.prank(forwarder);
+            txRegistry.acknowledgeTransactions(
+                reporter, forwarder, ackDeadline, dataHash, reportedChainId, 2, av, ar, ass
+            );
+        }
+
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+        uint256 nonce = txRegistry.nonces(reporter);
+        uint256 deadline = block.timestamp + 3600;
+
+        _sigWindowBlock = windowBlock;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
+
+        // The submitted arrays hash to exactly the acknowledged dataHash, so the hash check passes
+        // and only the count check can be responsible for this revert.
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__BatchCountMismatch.selector);
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ANTI-PHISHING: WINDOW BLOCK COMMITMENT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A registration signature committing to a block BEFORE the grace period is rejected.
+    /// @dev This is the core anti-phishing control. A block older than `gracePeriodStart` already
+    ///      existed when the victim acknowledged, so its hash was knowable then — a phisher could
+    ///      have harvested both signatures in one sitting. Only a block at or after the grace
+    ///      period proves the second signature was produced in a genuinely later interaction.
+    function test_registerTransactions_revertsIfWindowBlockBeforeGracePeriod() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        _doAcknowledge(forwarder, txHashes, chainIds);
+
+        uint256 graceStart = txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart;
+        _rollToWindow(graceStart);
+
+        // One block too early — mined and hash-available, but pre-dates the grace period
+        uint256 windowBlock = graceStart - 1;
+        uint256 nonce = txRegistry.nonces(reporter);
+        uint256 deadline = block.timestamp + 3600;
+        _sigWindowBlock = windowBlock;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockBeforeGracePeriod.selector);
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
+    }
+
+    /// @notice A registration signature referencing the current (unmined) block is rejected.
+    /// @dev `blockhash(block.number)` is 0 in the EVM. Without this bound an attacker could
+    ///      commit to bytes32(0) for a block that does not exist yet and sidestep the freshness
+    ///      requirement entirely.
+    function test_registerTransactions_revertsIfWindowBlockNotMined() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        _doAcknowledge(forwarder, txHashes, chainIds);
+
+        _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        // The current block is not yet mined, so its hash is unavailable
+        uint256 windowBlock = block.number;
+        uint256 nonce = txRegistry.nonces(reporter);
+        uint256 deadline = block.timestamp + 3600;
+        _sigWindowBlock = windowBlock;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockNotMined.selector);
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
+    }
+
+    /// @notice A window block exactly at the edge of the `blockhash` horizon (age 255) is accepted.
+    /// @dev Pins the lower half of the boundary the source flags at
+    ///      {TimingConfig.resolveWindowBlockHash}: the check is `>= MAX_WINDOW_BLOCK_AGE`, so age
+    ///      255 must still work. Without this, tightening the bound by one would pass CI while
+    ///      silently shortening the window a P2P relay has to get the signature on-chain.
+    function test_registerTransactions_acceptsWindowBlockAtMaxAge() public {
+        TransactionRegistry reg = _deployLongWindowRegistry();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doFullFlowAck(reg, txHashes, chainIds);
+
+        _sigWindowBlock = reg.getTransactionAcknowledgementData(reporter).gracePeriodStart;
+        vm.roll(_sigWindowBlock + TimingConfig.MAX_WINDOW_BLOCK_AGE - 1);
+        assertEq(block.number - _sigWindowBlock, 255, "Precondition: window block age must be exactly 255");
+
+        _doFullFlowReg(reg, txHashes, chainIds, 0);
+
+        assertTrue(reg.isTransactionRegistered(txHashes[0], chainIds[0]), "Age-255 window block must be accepted");
+    }
+
+    /// @notice A window block one past the `blockhash` horizon (age 256) is rejected.
+    /// @dev The upper half of the same boundary. Previously asserted only on the WalletRegistry
+    ///      path, so a regression that dropped this bound from the transaction path — where it
+    ///      would let a caller commit to `bytes32(0)` for an unreachable block — passed CI.
+    function test_registerTransactions_revertsIfWindowBlockTooOld() public {
+        TransactionRegistry reg = _deployLongWindowRegistry();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doFullFlowAck(reg, txHashes, chainIds);
+
+        uint256 windowBlock = reg.getTransactionAcknowledgementData(reporter).gracePeriodStart;
+        _sigWindowBlock = windowBlock;
+        vm.roll(windowBlock + TimingConfig.MAX_WINDOW_BLOCK_AGE);
+        assertEq(block.number - windowBlock, 256, "Precondition: window block age must be exactly 256");
+
+        // Precomputed BEFORE vm.expectRevert: the cheatcode applies to the next external call,
+        // and `nonces()` is one.
+        uint256 deadline = block.timestamp + 3600;
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxRegFor(
+            address(reg),
+            _computeDataHash(txHashes, chainIds),
+            CAIP10Evm.caip2Hash(uint64(1)),
+            uint32(txHashes.length),
+            reg.nonces(reporter),
+            deadline
+        );
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        vm.prank(forwarder);
+        reg.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
+    }
+
+    /// @dev A registry whose registration window is long enough that the 256-block `blockhash`
+    ///      horizon — not the acknowledgement expiry — is the binding constraint. With the shared
+    ///      DEADLINE_BLOCKS of 50 the acknowledgement expires ~100 blocks in, so the horizon is
+    ///      unreachable and neither boundary above can be exercised.
+    function _deployLongWindowRegistry() internal returns (TransactionRegistry reg) {
+        reg = new TransactionRegistry(owner, address(0), GRACE_BLOCKS, 400);
+        vm.prank(owner);
+        reg.setHub(address(hub));
+    }
+
+    /// @notice Only the forwarder named in the acknowledgement signature may submit phase 1.
+    /// @dev Signature is valid and names `forwarder`, but a third party submits it. Letting anyone
+    ///      relay the acknowledgement would let an attacker burn the reporter's nonce and grind the
+    ///      randomized timing window by choosing when to open it.
+    function test_acknowledgeTransactions_revertsIfSenderIsNotForwarder() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint256 nonce = txRegistry.nonces(reporter);
+        uint256 deadline = block.timestamp + 3600;
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxAck(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidForwarder.selector);
+        vm.prank(makeAddr("thirdParty"));
+        txRegistry.acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, 3, v, r, s);
+    }
+
+    /// @notice A registration deadline beyond MAX_SIGNATURE_LIFETIME is rejected.
+    /// @dev Bounds how long a harvested signature stays usable. Without it a hostile frontend
+    ///      could set an effectively infinite deadline and submit months later.
+    ///      The check fires before signature recovery, so a dummy signature suffices.
+    function test_registerTransactions_revertsIfDeadlineTooFarInFuture() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doAcknowledge(forwarder, txHashes, chainIds);
+
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+        uint256 tooFar = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__DeadlineTooFarInFuture.selector);
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, tooFar, txHashes, chainIds, windowBlock, 27, bytes32(0), bytes32(0));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -648,6 +866,65 @@ contract TransactionRegistryTest is EIP712TestHelper {
             assertEq(entry.bridgeId, 1);
             assertTrue(entry.isSponsored);
         }
+    }
+
+    /// @notice A cross-chain batch whose entries were all already registered writes no batch.
+    /// @dev SECURITY/DATA-INTEGRITY (C-2). The cross-chain path used to increment `_nextBatchId`
+    ///      unconditionally and emit `TransactionBatchRegistered(..., 0, ...)` even when every
+    ///      entry was skipped. The indexer joins entries to their batch on the shared transaction
+    ///      hash, so a batch row with no per-entry events beside it is a permanent orphan, and the
+    ///      consumed ID is a hole in the sequence. The local path (`_executeTxBatchRegistration`)
+    ///      already got this right; this asserts the cross-chain path matches it.
+    ///
+    ///      It must NOT revert: Hyperlane redelivers a reverting `handle` indefinitely, so the
+    ///      duplicate delivery has to succeed as a no-op.
+    function test_TxRegFromHub_AllAlreadyRegistered_WritesNoBatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 chainRef = CAIP10Evm.caip2Hash(uint64(10));
+
+        // First delivery lands normally and takes batch ID 1.
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter, dataHash, chainRef, chainRef, true, txHashes, chainIds, 1, keccak256("msg1")
+        );
+        assertEq(txRegistry.getTransactionBatch(1).transactionCount, 3, "First delivery should write batch 1");
+
+        // Second delivery of the same hashes: every entry is skipped.
+        vm.recordLogs();
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter, dataHash, chainRef, chainRef, true, txHashes, chainIds, 1, keccak256("msg2")
+        );
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 batchTopic = keccak256("TransactionBatchRegistered(uint256,address,bytes32,uint32,bool)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != batchTopic, "Zero-entry delivery must not emit a batch event");
+        }
+
+        // Nothing was written at ID 2 ...
+        assertEq(txRegistry.getTransactionBatch(2).timestamp, 0, "No batch row should exist at ID 2");
+
+        // ... and the ID was not consumed: the next real batch takes 2, not 3.
+        bytes32[] memory freshHashes = new bytes32[](1);
+        bytes32[] memory freshChains = new bytes32[](1);
+        freshHashes[0] = keccak256("tx-fresh");
+        freshChains[0] = chainIds[0];
+
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter,
+            _computeDataHash(freshHashes, freshChains),
+            chainRef,
+            chainRef,
+            true,
+            freshHashes,
+            freshChains,
+            1,
+            keccak256("msg3")
+        );
+        assertEq(txRegistry.getTransactionBatch(2).transactionCount, 1, "Next real batch must reuse ID 2");
     }
 
     /// @notice Non-hub callers are rejected
@@ -718,46 +995,37 @@ contract TransactionRegistryTest is EIP712TestHelper {
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice generateTransactionHashStruct returns valid structs for step 1 and step 2
-    function test_GenerateTransactionHashStruct() public {
+    /// @notice getTransactionSignatureDeadline returns a usable deadline for both phases
+    function test_GetTransactionSignatureDeadline() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
 
-        // Step 1: Acknowledgement
+        // Deadline only — the function no longer returns a hash struct, because the
+        // registration typehash commits to a `windowBlockHash` that is unknowable here.
         vm.prank(reporter);
-        (uint256 deadline1, bytes32 hashStruct1) =
-            txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 1);
-
+        uint256 deadline1 = txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 1);
         assertTrue(deadline1 > block.timestamp, "Deadline should be in the future");
-        assertTrue(hashStruct1 != bytes32(0), "HashStruct should not be zero");
 
-        // Step 2: Registration
         vm.prank(reporter);
-        (uint256 deadline2, bytes32 hashStruct2) =
-            txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 2);
-
+        uint256 deadline2 = txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 2);
         assertTrue(deadline2 > block.timestamp, "Deadline should be in the future");
-        assertTrue(hashStruct2 != bytes32(0), "HashStruct should not be zero");
-
-        // Step 1 and step 2 should produce different hash structs (different typehashes)
-        assertTrue(hashStruct1 != hashStruct2, "ACK and REG hash structs should differ");
     }
 
-    /// @notice generateTransactionHashStruct reverts for invalid step values
-    function test_GenerateTransactionHashStruct_RejectsInvalidStep() public {
+    /// @notice getTransactionSignatureDeadline reverts for invalid step values
+    function test_GetTransactionSignatureDeadline_RejectsInvalidStep() public {
         bytes32 dataHash = keccak256("data");
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
 
         // Step 0 is invalid
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidStep.selector);
         vm.prank(reporter);
-        txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 0);
+        txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 0);
 
         // Step 3 is invalid
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidStep.selector);
         vm.prank(reporter);
-        txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 3);
+        txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -809,6 +1077,27 @@ contract TransactionRegistryTest is EIP712TestHelper {
         // deadlineBlocks < 2 * graceBlocks
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__DeadlineInPast.selector);
         new TransactionRegistry(owner, address(0), 10, 15);
+    }
+
+    /// @notice Constructor rejects `deadlineBlocks == 2 * graceBlocks` — the exact boundary.
+    /// @dev The case the old `< 2 * graceBlocks` bound wrongly ACCEPTED. `getGracePeriodEndBlock`
+    ///      can return `bn + 2g - 1` while `getDeadlineBlock` can return `bn + 2g`, and
+    ///      `resolveWindowBlockHash` requires `gracePeriodStart <= windowBlock < block.number` — so
+    ///      the earliest usable registration block is `gracePeriodStart + 1`, already at/past the
+    ///      deadline on that draw. A reporter acknowledging under such a config burns a nonce and
+    ///      the acknowledgement gas on a batch that can never be registered, and cannot
+    ///      re-acknowledge until the window expires. See {WalletRegistry} for the full derivation.
+    function test_Constructor_RejectsDeadlineExactlyTwiceGrace() public {
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__DeadlineInPast.selector);
+        new TransactionRegistry(owner, address(0), 10, 20);
+    }
+
+    /// @notice Constructor accepts `deadlineBlocks == 2 * graceBlocks + 1` — the smallest config
+    ///         that guarantees a usable registration block for every randomised draw.
+    function test_Constructor_AcceptsDeadlineTwiceGracePlusOne() public {
+        TransactionRegistry reg = new TransactionRegistry(owner, address(0), 10, 21);
+        assertEq(reg.graceBlocks(), 10);
+        assertEq(reg.deadlineBlocks(), 21);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -918,7 +1207,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
                 reportedChainId,
                 transactionCount,
                 nonce,
-                deadline
+                deadline,
+                blockhash(_sigWindowBlock)
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _prodDomainSeparatorFor(registry), structHash));
@@ -932,9 +1222,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
     {
         _doFullFlowAck(reg, txHashes, chainIds);
 
-        // Advance past grace
-        ITransactionRegistry.TransactionAcknowledgementData memory ack = reg.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        // Advance past grace and pick the window block the reg signature will commit to
+        _sigWindowBlock = _rollToWindow(reg.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         fee = reg.quoteRegistration(reporter);
         vm.deal(forwarder, fee);
@@ -952,6 +1241,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
         reg.acknowledgeTransactions(reporter, forwarder, deadline0, dataHash, reportedChainId, txCount, v0, r0, s0);
     }
 
+    /// @dev Reads the window block from `_sigWindowBlock` (set by the caller via _rollToWindow)
+    ///      rather than taking it as a parameter — an extra param here overflows the stack.
     function _doFullFlowReg(
         TransactionRegistry reg,
         bytes32[] memory txHashes,
@@ -965,7 +1256,9 @@ contract TransactionRegistryTest is EIP712TestHelper {
         (uint8 v1, bytes32 r1, bytes32 s1) =
             _signProdTxRegFor(address(reg), dataHash, reportedChainId, txCount, reg.nonces(reporter), deadline1);
         vm.prank(forwarder);
-        reg.registerTransactions{ value: sendValue }(reporter, deadline1, txHashes, chainIds, v1, r1, s1);
+        reg.registerTransactions{ value: sendValue }(
+            reporter, deadline1, txHashes, chainIds, _sigWindowBlock, v1, r1, s1
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -992,28 +1285,65 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doFullFlowAck(feeRegistry, txHashes, chainIds);
 
         // Advance past grace
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            feeRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        uint256 windowBlock = _rollToWindow(feeRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         // Pre-compute nonce and signature before vm.expectRevert
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 txCount = uint32(txHashes.length);
         uint256 deadline1 = block.timestamp + 3600;
+        _sigWindowBlock = windowBlock;
         (uint8 v1, bytes32 r1, bytes32 s1) = _signProdTxRegFor(
             address(feeRegistry), dataHash, reportedChainId, txCount, feeRegistry.nonces(reporter), deadline1
         );
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InsufficientFee.selector);
         vm.prank(forwarder);
-        feeRegistry.registerTransactions{ value: 0 }(reporter, deadline1, txHashes, chainIds, v1, r1, s1);
+        feeRegistry.registerTransactions{ value: 0 }(reporter, deadline1, txHashes, chainIds, windowBlock, v1, r1, s1);
     }
 
     /// @notice Excess ETH above the required fee is refunded to msg.sender
     function test_RegisterTransactions_RefundsExcess() public {
         (TransactionRegistry feeRegistry,,) = _deployWithFeeManager();
         _doFullFlowRefundsExcess(feeRegistry);
+    }
+
+    /// @notice Free-registration mode (feeManager == address(0)) refunds everything the caller sent.
+    /// @dev `_collectFee` used to `return` on its first line in this mode, BEFORE the excess-refund
+    ///      branch, so any `msg.value` was silently retained and recoverable only by the owner.
+    ///      `feeManager == address(0)` is a documented, supported deployment shape (it is what this
+    ///      suite's own `setUp` uses), and every other fee mode refunds the overpayment — including
+    ///      the zero-effective-entry path just below, which already returned the full amount. The
+    ///      free path must not be the one mode that keeps the most.
+    function test_RegisterTransactions_FreeMode_RefundsEntireMsgValue() public {
+        // The suite registry is deployed with feeManager == address(0).
+        assertEq(txRegistry.quoteRegistration(reporter), 0, "Precondition: registrations are free");
+
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        uint256 sent = 1 ether;
+        vm.deal(forwarder, sent);
+        uint256 registryBefore = address(txRegistry).balance;
+
+        _doFullFlowReg(txRegistry, txHashes, chainIds, sent);
+
+        assertTrue(txRegistry.isTransactionRegistered(txHashes[0], chainIds[0]), "Registration must still succeed");
+        assertEq(forwarder.balance, sent, "Caller must get the full amount back");
+        assertEq(address(txRegistry).balance, registryBefore, "Registry must retain nothing");
+    }
+
+    /// @notice Free-registration mode with msg.value == 0 is unaffected (the refund is a no-op).
+    function test_RegisterTransactions_FreeMode_ZeroValueIsNoOp() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        _doFullFlowReg(txRegistry, txHashes, chainIds, 0);
+
+        assertTrue(txRegistry.isTransactionRegistered(txHashes[0], chainIds[0]));
+        assertEq(address(txRegistry).balance, 0);
     }
 
     /// @dev Extracted to a separate function to avoid stack-too-deep in the test body
@@ -1023,9 +1353,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doFullFlowAck(feeRegistry, txHashes, chainIds);
 
         // Advance past grace
-        ITransactionRegistry.TransactionAcknowledgementData memory ack =
-            feeRegistry.getTransactionAcknowledgementData(reporter);
-        vm.roll(ack.gracePeriodStart + 1);
+        _sigWindowBlock = _rollToWindow(feeRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
 
         uint256 fee = feeRegistry.quoteRegistration(reporter);
         uint256 overpayment = 1 ether;
@@ -1036,6 +1364,86 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doFullFlowReg(feeRegistry, txHashes, chainIds, fee + overpayment);
 
         assertEq(balBefore - forwarder.balance, fee, "Forwarder should only pay the exact fee");
+    }
+
+    /// @notice V8: a two-phase batch where every entry is skipped (already registered) must not
+    ///         charge a registration fee — the caller gets the whole `msg.value` back.
+    /// @dev It must still clear the acknowledgement rather than revert. `acknowledgeTransactions`
+    ///      refuses a new acknowledgement while a live one exists, so reverting here would strand
+    ///      the reporter behind a dataHash they can never satisfy until the window expires.
+    function test_TxReg_ZeroEffectiveEntries_ChargesNoFee() public {
+        (TransactionRegistry feeRegistry,,) = _deployWithFeeManager();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        // First round registers every hash, so the identical second round is a full no-op.
+        _doFullFlowOnRegistry(feeRegistry, txHashes, chainIds);
+        _zeroEffectiveSecondRound(feeRegistry, txHashes, chainIds);
+    }
+
+    /// @dev Extracted to keep the test body off the stack.
+    function _zeroEffectiveSecondRound(
+        TransactionRegistry feeRegistry,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds
+    ) internal {
+        uint256 hubBefore = address(hub).balance;
+
+        _doFullFlowAck(feeRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(feeRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        uint256 fee = feeRegistry.quoteRegistration(reporter);
+        assertTrue(fee > 0, "Precondition: fee manager must price this non-zero");
+        vm.deal(forwarder, fee);
+        uint256 balBefore = forwarder.balance;
+
+        _doFullFlowReg(feeRegistry, txHashes, chainIds, fee);
+
+        assertEq(forwarder.balance, balBefore, "Zero-entry batch must be fully refunded");
+        assertEq(address(hub).balance, hubBefore, "Hub must receive nothing for a zero-entry batch");
+        assertEq(
+            feeRegistry.getTransactionAcknowledgementData(reporter).trustedForwarder,
+            address(0),
+            "Acknowledgement must still be cleared so the reporter is not locked out"
+        );
+    }
+
+    /// @notice V8 residual: a two-phase batch that writes zero entries must not materialise a batch.
+    /// @dev The refund half of V8 landed; the batch write did not. The indexer joins per-entry
+    ///      events to batches on the transaction hash they share, so a batch row with
+    ///      transactionCount 0 and no accompanying TransactionRegistered events is a permanent
+    ///      orphan — exactly what `registerTransactionsFromOperator`'s EmptyBatch guard was added
+    ///      to prevent. A burnt batch ID also leaves a hole in the sequence the indexer walks.
+    function test_TxReg_ZeroEffectiveEntries_DoesNotMaterialiseBatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        // First round registers every hash, so the identical second round writes nothing.
+        _doFullFlowOnRegistry(txRegistry, txHashes, chainIds);
+        uint256 batchCountAfterFirst = txRegistry.transactionBatchCount();
+
+        _zeroEffectiveRoundEmitsNoBatch(txHashes, chainIds);
+
+        assertEq(txRegistry.transactionBatchCount(), batchCountAfterFirst, "Zero-entry batch must not burn a batch ID");
+        assertEq(
+            txRegistry.getTransactionBatch(batchCountAfterFirst + 1).timestamp,
+            0,
+            "No phantom batch row may be written for a zero-entry batch"
+        );
+    }
+
+    /// @dev Runs the zero-effective round and asserts no TransactionBatchRegistered was emitted.
+    ///      Extracted to keep the recordLogs bookkeeping off the caller's stack.
+    function _zeroEffectiveRoundEmitsNoBatch(bytes32[] memory txHashes, bytes32[] memory chainIds) internal {
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        vm.recordLogs();
+        _doFullFlowReg(txRegistry, txHashes, chainIds, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 batchTopic = keccak256("TransactionBatchRegistered(uint256,address,bytes32,uint32,bool)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != batchTopic, "Zero-entry batch must not emit TransactionBatchRegistered");
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1105,7 +1513,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         assertTrue(txRegistry.isTransactionRegistered(txHashes[2], chainId));
     }
 
-    /// @notice Operator batch skips already-registered transactions silently
+    /// @notice Already-registered entries are skipped, and the batch counts only what landed.
     function test_TxRegFromOperator_SkipsDuplicates() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
 
@@ -1113,12 +1521,36 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.prank(operatorSubmitter);
         txRegistry.registerTransactionsFromOperator(keccak256("op1"), txHashes, chainIds);
 
-        // Second batch: same txHashes, should all be skipped
+        // Second batch: the same 3 duplicates plus one genuinely new entry
+        bytes32[] memory mixedHashes = new bytes32[](4);
+        bytes32[] memory mixedChainIds = new bytes32[](4);
+        for (uint256 i = 0; i < 3; i++) {
+            mixedHashes[i] = txHashes[i];
+            mixedChainIds[i] = chainIds[i];
+        }
+        mixedHashes[3] = keccak256("txBrandNew");
+        mixedChainIds[3] = chainIds[0];
+
         vm.prank(operatorSubmitter);
-        uint256 batchId2 = txRegistry.registerTransactionsFromOperator(keccak256("op2"), txHashes, chainIds);
+        uint256 batchId2 = txRegistry.registerTransactionsFromOperator(keccak256("op2"), mixedHashes, mixedChainIds);
 
         ITransactionRegistry.TransactionBatch memory batch2 = txRegistry.getTransactionBatch(batchId2);
-        assertEq(batch2.transactionCount, 0, "All duplicates should be skipped");
+        assertEq(batch2.transactionCount, 1, "Only the one new entry should be counted");
+    }
+
+    /// @notice A batch where EVERY entry is a duplicate reverts rather than burning a batch ID.
+    /// @dev Matches ContractRegistry and WalletRegistry. Previously this silently succeeded:
+    ///      the operator paid full gas for a no-op, a batch ID was consumed, and the indexer
+    ///      materialised a phantom zero-entry batch with no per-entry events to join against.
+    function test_TxRegFromOperator_RevertsWhenEveryEntryIsDuplicate() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        vm.prank(operatorSubmitter);
+        txRegistry.registerTransactionsFromOperator(keccak256("op1"), txHashes, chainIds);
+
+        vm.prank(operatorSubmitter);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__EmptyBatch.selector);
+        txRegistry.registerTransactionsFromOperator(keccak256("op2"), txHashes, chainIds);
     }
 
     /// @notice Two-phase registration skips zero hashes in the txHashes array
@@ -1386,8 +1818,105 @@ contract TransactionRegistryTest is EIP712TestHelper {
         bytes32 packed = vm.load(address(txRegistry), reads[0]);
         assertNotEq(packed, bytes32(0), "TransactionEntry should be populated");
 
-        // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
-        assertEq(vm.load(address(txRegistry), nextSlot), bytes32(0), "TransactionEntry overflowed to second slot");
+        // Deliberately NOT asserted: that slot+1 is zero. Entry slots are keccak-derived, so the
+        // neighbouring slot is unallocated whatever the struct's size — that assertion held for a
+        // two-slot struct too and read as a second, independent proof of the invariant while
+        // proving nothing. The vm.record()/reads.length check above is the real proof.
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE MALLEABILITY AND REPLAY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev secp256k1 group order. (v^1, r, n - s) recovers the same signer under raw ecrecover.
+    uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    function _malleate(uint8 v, bytes32 s) internal pure returns (uint8 flippedV, bytes32 flippedS) {
+        flippedS = bytes32(SECP256K1_N - uint256(s));
+        flippedV = v == 27 ? 28 : 27;
+    }
+
+    /// @notice A malleated acknowledgement signature is rejected.
+    /// @dev SECURITY. Recovery goes through OpenZeppelin's ECDSA, which rejects s > n/2, so the
+    ///      property holds — but nothing pinned it anywhere in the suite. A hand-rolled
+    ///      `ecrecover` swapped in during a gas optimisation would accept the malleated twin of
+    ///      every signature this contract consumes, and no test would notice.
+    function test_AcknowledgeTransactions_RejectsMalleatedSignature() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxAckFor(
+            address(txRegistry), dataHash, reportedChainId, txCount, txRegistry.nonces(reporter), deadline
+        );
+        (uint8 flippedV, bytes32 flippedS) = _malleate(v, s);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
+        txRegistry.acknowledgeTransactions(
+            reporter, forwarder, deadline, dataHash, reportedChainId, txCount, flippedV, r, flippedS
+        );
+
+        assertFalse(txRegistry.isTransactionPending(reporter), "A malleated signature must not open a window");
+    }
+
+    /// @notice A captured acknowledgement signature cannot be replayed once its window lapses.
+    /// @dev SECURITY. Capture a genuine acknowledgement, wait for the registration window to
+    ///      expire without the reporter completing, then re-submit the identical bytes. The
+    ///      `AlreadyAcknowledged` guard has lapsed by then, so the nonce is the only defense left.
+    ///      vm.roll moves block.number only, so the EIP-712 deadline (a timestamp) stays valid.
+    ///      This contract reads `nonces[reporter]` itself rather than taking it as a parameter, so
+    ///      the moved nonce surfaces as a digest mismatch (`InvalidSignature`) rather than a
+    ///      dedicated nonce error — the defense is the same, the reported reason differs.
+    function test_AcknowledgeTransactions_CapturedSignatureCannotBeReplayed() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+        uint256 nonce = txRegistry.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxAckFor(address(txRegistry), dataHash, reportedChainId, txCount, nonce, deadline);
+
+        vm.prank(forwarder);
+        txRegistry.acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, txCount, v, r, s);
+
+        vm.roll(txRegistry.getTransactionAcknowledgementData(reporter).deadline + 1);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidSignature.selector);
+        txRegistry.acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, txCount, v, r, s);
+    }
+
+    /// @notice A registration signature cannot be replayed after it has succeeded.
+    /// @dev Asserting no second batch is minted (rather than only that the call reverts) is what
+    ///      makes this survive a change to which guard wins: a replay that got through would
+    ///      burn a batch ID and emit a phantom batch for the indexer to join against.
+    function test_RegisterTransactions_CannotBeReplayedAfterSuccess() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doAcknowledge(forwarder, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxRegFor(
+            address(txRegistry), dataHash, reportedChainId, txCount, txRegistry.nonces(reporter), deadline
+        );
+
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, _sigWindowBlock, v, r, s);
+        uint256 batchesAfterFirst = txRegistry.transactionBatchCount();
+
+        vm.prank(forwarder);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidForwarder.selector);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, _sigWindowBlock, v, r, s);
+
+        assertEq(txRegistry.transactionBatchCount(), batchesAfterFirst, "A replay must not mint a second batch");
     }
 }

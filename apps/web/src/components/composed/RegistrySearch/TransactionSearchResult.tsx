@@ -6,24 +6,73 @@
  */
 
 import { Alert, AlertTitle, AlertDescription, Badge } from '@swr/ui';
-import { AlertCircle, CheckCircle2, Link as LinkIcon } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Link as LinkIcon } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import type { TransactionSearchData } from '@/hooks';
 
-export interface TransactionSearchResultProps {
-  /** Whether the transaction was found in the registry */
-  found: boolean;
-  /** Transaction data from indexer (null if not found) */
-  data: TransactionSearchData | null;
-  /** Additional class names */
-  className?: string;
-}
+/**
+ * Props for the transaction result card.
+ *
+ * A discriminated union on `found`, mirroring `TransactionSearchResult` in `@swr/search`.
+ * `found: true` with `data: null` used to slip through the `if (found && data)` guard and
+ * render the green "Not Reported / Clean" card for a transaction that IS reported — the same
+ * defect as finding UI-8 on the address card.
+ */
+export type TransactionSearchResultProps = { className?: string } & (
+  | {
+      /** Reported in the registry. */
+      found: true;
+      /** Required: a hit always carries its data. */
+      data: TransactionSearchData;
+    }
+  | {
+      /** Not reported. */
+      found: false;
+      data?: null;
+    }
+);
 
 /**
  * Displays transaction search result from the indexer.
  */
-export function TransactionSearchResult({ found, data, className }: TransactionSearchResultProps) {
+export function TransactionSearchResult({
+  found,
+  data = null,
+  className,
+}: TransactionSearchResultProps) {
+  // Unconstructible in TypeScript, still handled at runtime: a match we cannot describe is
+  // not an absence, and must never resolve downward into the green card. See the address
+  // card's equivalent guard (UI-8).
+  if (found && !data) {
+    return (
+      <Alert
+        className={cn(
+          'border-amber-500 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-100',
+          className
+        )}
+      >
+        <AlertTriangle className="h-4 w-4 text-amber-600" />
+        <AlertTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+          Could Not Verify
+          <Badge
+            variant="outline"
+            className="text-xs border-amber-500 text-amber-700 dark:text-amber-300"
+          >
+            Unverified
+          </Badge>
+        </AlertTitle>
+        <AlertDescription className="text-amber-800 dark:text-amber-200">
+          <p>
+            This transaction was matched in the registry, but its details could not be loaded. This
+            is <strong>not</strong> a clean result — treat it as reported until it can be checked
+            again.
+          </p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (found && data) {
     return (
       <Alert variant="destructive" className={className}>
@@ -43,11 +92,11 @@ export function TransactionSearchResult({ found, data, className }: TransactionS
           {/* Chain reports */}
           <div className="space-y-2 mt-3 pt-3 border-t border-destructive/20">
             <p className="text-xs text-muted-foreground font-medium">Reported on:</p>
-            {data.chains.map((chain, index) => {
+            {data.chains.map((chain) => {
               const reportedDate = new Date(Number(chain.reportedAt) * 1000);
               return (
                 <div
-                  key={`${chain.caip2ChainId}-${chain.batchId}-${index}`}
+                  key={`${chain.caip2ChainId}-${chain.batchId}`}
                   className="text-xs space-y-1 p-2 rounded bg-destructive/5"
                 >
                   <div className="flex items-center gap-2">

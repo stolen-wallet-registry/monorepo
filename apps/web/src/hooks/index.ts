@@ -45,13 +45,6 @@ export { useStepNavigation, type UseStepNavigationResult } from './useStepNaviga
 
 // P2P hooks
 export {
-  useP2PConnection,
-  type UseP2PConnectionOptions,
-  type UseP2PConnectionResult,
-  useP2PSignatureRelay,
-  type UseP2PSignatureRelayOptions,
-  type UseP2PSignatureRelayResult,
-  type P2PRole,
   useP2PKeepAlive,
   type UseP2PKeepAliveOptions,
   type UseP2PKeepAliveResult,
@@ -82,6 +75,8 @@ export {
   needsCrossChainConfirmation,
   type CrossChainStatus,
   type UseCrossChainConfirmationOptions,
+  type WalletCrossChainConfirmationOptions,
+  type TransactionCrossChainConfirmationOptions,
   type UseCrossChainConfirmationResult,
 } from './useCrossChainConfirmation';
 
@@ -123,6 +118,9 @@ export {
   type TransactionSearchResult,
   type TransactionSearchData,
   type TransactionChainReport,
+  // Indexer freshness
+  useIndexerStatus,
+  type IndexerStatus,
 } from './indexer';
 
 // ENS hooks

@@ -9,14 +9,18 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react
 import { useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
-import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
+import { GracePeriodTimer, getGracePeriodStatus } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { removeSignature } from '@/lib/signatures';
+import { SIGNATURE_STEP } from '@swr/signatures';
 import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
@@ -37,6 +41,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const chainId = useChainId();
   const { registeree } = useFormStore();
   const { acknowledgementHash } = useRegistrationStore();
+  const { goToStep, resetFlow } = useStepNavigation();
   const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback.
@@ -55,8 +60,11 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     ? getExplorerTxUrl(chainId, acknowledgementHash)
     : null;
 
-  // Track logging state
+  // Track logging state. Separate refs on purpose: the deadline-loaded log and the
+  // timer-initialized log fire on different conditions, and sharing one latch meant whichever
+  // ran first permanently suppressed the other (the timer log was dead code).
   const hasLoggedStart = useRef(false);
+  const hasLoggedTimerInit = useRef(false);
   const hasLoggedNoPendingAck = useRef(false);
   // Store initial totalMs for progress bar calculation (captured once from first valid totalMs)
   const [initialTotalMs, setInitialTotalMs] = useState<number | undefined>(undefined);
@@ -75,6 +83,11 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // Detect zeroed deadline data — indicates no pending acknowledgement in the contract
   const hasNoPendingAck =
     deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+
+  // Registration window already closed on-chain (a real ack exists but its expiry block has
+  // passed). Must be checked AFTER hasNoPendingAck: the contract reports isExpired=true for a
+  // nonexistent acknowledgement too (deadline 0 <= block.number).
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
 
   useEffect(() => {
     if (hasNoPendingAck && !hasLoggedNoPendingAck.current) {
@@ -125,14 +138,39 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     onComplete();
   }, [setThemeVariant, setColorScheme, onComplete]);
 
+  /**
+   * Recovery for both unrecoverable grace-period states.
+   *
+   * Either the contract has no pending acknowledgement or its window has closed on chain. In
+   * both cases the acknowledgement's nonce is spent, so every cached signature for this
+   * registeree can now only produce another revert — they are discarded before returning to the
+   * first signing step. Mirrors `RegistrationPayStep`'s window-closed retry path, which is the
+   * only other place the flow restarts from acknowledgement.
+   */
+  const restartFromAcknowledgement = useCallback(() => {
+    logger.registration.warn('Grace period unrecoverable, restarting from acknowledgement', {
+      registeree,
+      chainId,
+    });
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
+    goToStep('acknowledge-and-sign');
+  }, [registeree, chainId, goToStep]);
+
   // Countdown timer - target is the START block (when window opens)
   // Note: The hook is intentionally called even when deadlines is null/loading.
   // The hook is designed to handle null values gracefully (returns 0 time remaining),
   // and this pattern follows React's rules of hooks (always call hooks in the same order).
   // The early return for loading state above prevents invalid UI while data loads.
-  // Pass null when no pending ack to prevent timer from firing immediately on zeroed data
-  const timerTargetBlock = hasNoPendingAck ? null : (deadlines?.start ?? null);
-  const timerCurrentBlock = hasNoPendingAck ? null : (deadlines?.currentBlock ?? null);
+  // Pass null when no pending ack OR when the on-chain window has already closed. The timer
+  // targets the START block, so on a closed window it would see the target in the past, fire
+  // onExpire immediately, and auto-advance the user into a guaranteed registration revert
+  // after signing a second EIP-712 message.
+  const timerDisabled = hasNoPendingAck || windowClosed;
+  const timerTargetBlock = timerDisabled ? null : (deadlines?.start ?? null);
+  const timerCurrentBlock = timerDisabled ? null : (deadlines?.currentBlock ?? null);
 
   const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
     useCountdownTimer({
@@ -152,8 +190,8 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         setInitialTotalMs(totalMs);
       }
       // Log once
-      if (!hasLoggedStart.current) {
-        hasLoggedStart.current = true;
+      if (!hasLoggedTimerInit.current) {
+        hasLoggedTimerInit.current = true;
         logger.registration.debug('Grace period timer initialized', {
           totalMs,
           blocksLeft: blocksLeft.toString(),
@@ -165,12 +203,9 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // Missing registeree
   if (!registeree) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -203,13 +238,21 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // No pending acknowledgement — contract returned zeroed deadline data
   if (hasNoPendingAck) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No pending acknowledgement found. The registration window may have expired. Please go back
-          and submit the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromAcknowledgement}>
+        No pending acknowledgement found. The registration window may have expired. Start over to
+        sign and submit the acknowledgement again.
+      </FlowRecoveryAlert>
+    );
+  }
+
+  // Registration window closed on-chain — advancing would only produce a revert
+  if (windowClosed) {
+    return (
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromAcknowledgement}>
+        The registration window has expired (closed at block {deadlines.expiry.toString()}, current
+        block {deadlines.currentBlock.toString()}). Start over to sign and submit the
+        acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -247,9 +290,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         timeRemaining={timeRemaining}
         totalMs={totalMs}
         blocksLeft={blocksLeft}
-        isExpired={isExpired}
-        isRunning={isRunning}
-        isWaitingForBlock={isWaitingForBlock}
+        status={getGracePeriodStatus({ isExpired, isRunning, isWaitingForBlock })}
         initialTotalMs={initialTotalMs}
       />
 

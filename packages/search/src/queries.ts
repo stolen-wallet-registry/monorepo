@@ -14,13 +14,17 @@ import { gql } from 'graphql-request';
  */
 export const WALLET_QUERY = gql`
   query SearchWallet($address: String!) {
-    stolenWallet(id: $address) {
-      id
-      caip10
-      registeredAt
-      transactionHash
-      isSponsored
-      sourceChainCAIP2
+    stolenWallets(where: { walletAddress: $address }, limit: 1) {
+      items {
+        id
+        walletAddress
+        caip10
+        registeredAt
+        transactionHash
+        isSponsored
+        sourceChainCAIP2
+        reportedChainCAIP2
+      }
     }
   }
 `;
@@ -33,22 +37,50 @@ export const WALLET_BY_CAIP10_QUERY = gql`
     stolenWallets(where: { caip10: $caip10 }, limit: 1) {
       items {
         id
+        walletAddress
         caip10
         registeredAt
         transactionHash
         isSponsored
         sourceChainCAIP2
+        reportedChainCAIP2
       }
     }
   }
 `;
 
 /**
+ * Page size for the two per-chain report lookups below, and the number of pages either will
+ * follow before giving up and reporting the result as truncated.
+ *
+ * Both queries used to take whatever the server handed back — TRANSACTION_QUERY passed no
+ * limit at all and silently inherited ponder's `DEFAULT_LIMIT = 50`, CONTRACT_QUERY pinned
+ * `limit: 10` — with no cursor follow-up in either case. A contract flagged on 12 chains
+ * reported 10, and `chains.length` is quoted verbatim in user-facing copy.
+ *
+ * 100 per page sits well under ponder's `MAX_LIMIT = 1000` and covers every realistic
+ * multi-chain report in one round trip; the page cap exists only so a pathological row count
+ * cannot turn one search into an unbounded fetch loop. Exceeding it sets `chainsTruncated`
+ * rather than passing the shortfall off as the whole answer.
+ */
+export const REPORT_PAGE_SIZE = 100;
+export const REPORT_MAX_PAGES = 20;
+
+/**
  * Query fraudulent transactions by transaction hash.
+ *
+ * Paginated — see {@link REPORT_PAGE_SIZE}. `orderBy` is pinned because a cursor is only
+ * stable under a deterministic order.
  */
 export const TRANSACTION_QUERY = gql`
-  query SearchTransaction($txHash: String!) {
-    transactionInBatchs(where: { txHash: $txHash }) {
+  query SearchTransaction($txHash: String!, $limit: Int!, $after: String) {
+    transactionInBatchs(
+      where: { txHash: $txHash }
+      orderBy: "reportedAt"
+      orderDirection: "asc"
+      limit: $limit
+      after: $after
+    ) {
       items {
         id
         txHash
@@ -58,16 +90,28 @@ export const TRANSACTION_QUERY = gql`
         reporter
         reportedAt
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 `;
 
 /**
  * Query fraudulent contracts by address.
+ *
+ * Paginated — see {@link REPORT_PAGE_SIZE}.
  */
 export const CONTRACT_QUERY = gql`
-  query SearchContract($address: String!) {
-    fraudulentContracts(where: { contractAddress: $address }, limit: 10) {
+  query SearchContract($address: String!, $limit: Int!, $after: String) {
+    fraudulentContracts(
+      where: { contractAddress: $address }
+      orderBy: "reportedAt"
+      orderDirection: "asc"
+      limit: $limit
+      after: $after
+    ) {
       items {
         contractAddress
         caip2ChainId
@@ -75,6 +119,10 @@ export const CONTRACT_QUERY = gql`
         batchId
         operator
         reportedAt
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -99,11 +147,45 @@ export const OPERATOR_QUERY = gql`
 `;
 
 /**
- * Query list of operators.
+ * Query operators filtered by approval status.
+ *
+ * `$approved` is NON-NULL on purpose. It used to be nullable, and `listOperators` passed
+ * `undefined` for the unfiltered case — which `graphql-request` drops from the variables map,
+ * so `$approved` resolved to null and ponder turned `where: { approved: null }` into
+ * `approved IS NULL` (`buildWhereConditions`, graphql/index.js). `operator.approved` is NOT
+ * NULL, so that predicate matched zero rows: an unfiltered listing came back as an empty array
+ * with no error, reading as "this registry has no operators".
+ *
+ * The unfiltered case now has its own document ({@link OPERATORS_LIST_ALL_QUERY}) with no
+ * `where` clause at all, and the `!` here makes the old mistake a GraphQL validation error
+ * rather than a silent empty result.
  */
 export const OPERATORS_LIST_QUERY = gql`
-  query ListOperators($approved: Boolean) {
+  query ListOperators($approved: Boolean!) {
     operators(where: { approved: $approved }, orderBy: "approvedAt", orderDirection: "desc") {
+      items {
+        id
+        identifier
+        capabilities
+        approved
+        canSubmitWallet
+        canSubmitTransaction
+        canSubmitContract
+        approvedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query ALL operators, approved or revoked.
+ *
+ * A separate document rather than a nullable filter — see {@link OPERATORS_LIST_QUERY} for why
+ * "omit the variable" is not a safe way to express "no filter" against ponder.
+ */
+export const OPERATORS_LIST_ALL_QUERY = gql`
+  query ListAllOperators {
+    operators(orderBy: "approvedAt", orderDirection: "desc") {
       items {
         id
         identifier
@@ -157,12 +239,14 @@ export const RECENT_WALLETS_QUERY = gql`
     stolenWallets(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
+        walletAddress
         caip10
         registeredAt
         transactionHash
         isSponsored
         operator
         sourceChainCAIP2
+        reportedChainCAIP2
         batchId
       }
     }
@@ -215,6 +299,8 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
         operatorId
         registeredAt
         transactionHash
+        sourceChainCAIP2
+        messageId
       }
     }
   }
@@ -290,9 +376,6 @@ export const RECENT_CONTRACT_BATCHES_QUERY = gql`
 `;
 
 /**
- * Query wallet batch detail + entries.
- */
-/**
  * Query wallet batch only (no entries). Used as step 1 of two-step fetch.
  */
 export const WALLET_BATCH_ONLY_QUERY = gql`
@@ -323,41 +406,7 @@ export const WALLET_ENTRIES_BY_TX_HASH_QUERY = gql`
     ) {
       items {
         id
-        caip10
-        registeredAt
-        transactionHash
-        operator
-        sourceChainCAIP2
-        reportedChainCAIP2
-      }
-    }
-  }
-`;
-
-/**
- * Query wallet batch detail + entries (legacy single-query, kept for reference).
- * @deprecated Use WALLET_BATCH_ONLY_QUERY + WALLET_ENTRIES_BY_TX_HASH_QUERY instead.
- */
-export const WALLET_BATCH_DETAIL_QUERY = gql`
-  query WalletBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
-    walletBatch(id: $batchId) {
-      id
-      operatorId
-      operator
-      reportedChainCAIP2
-      walletCount
-      registeredAt
-      transactionHash
-    }
-    stolenWallets(
-      where: { batchId: $batchId }
-      orderBy: "registeredAt"
-      orderDirection: "desc"
-      limit: $limit
-      offset: $offset
-    ) {
-      items {
-        id
+        walletAddress
         caip10
         registeredAt
         transactionHash
@@ -385,6 +434,10 @@ export const TRANSACTION_BATCH_ONLY_QUERY = gql`
       operatorId
       registeredAt
       transactionHash
+      sourceChainId
+      sourceChainCAIP2
+      bridgeId
+      messageId
     }
   }
 `;
@@ -396,43 +449,6 @@ export const TRANSACTION_ENTRIES_BY_TX_HASH_QUERY = gql`
   query TransactionEntriesByTxHash($txHash: String!, $limit: Int!, $offset: Int) {
     transactionInBatchs(
       where: { transactionHash: $txHash }
-      orderBy: "reportedAt"
-      orderDirection: "desc"
-      limit: $limit
-      offset: $offset
-    ) {
-      items {
-        id
-        txHash
-        caip2ChainId
-        numericChainId
-        reporter
-        reportedAt
-      }
-    }
-  }
-`;
-
-/**
- * Query transaction batch detail + entries (legacy single-query, kept for reference).
- * @deprecated Use TRANSACTION_BATCH_ONLY_QUERY + TRANSACTION_ENTRIES_BY_TX_HASH_QUERY instead.
- */
-export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
-  query TransactionBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
-    transactionBatch(id: $batchId) {
-      id
-      dataHash
-      reporter
-      reportedChainCAIP2
-      transactionCount
-      isSponsored
-      isOperator
-      operatorId
-      registeredAt
-      transactionHash
-    }
-    transactionInBatchs(
-      where: { batchId: $batchId }
       orderBy: "reportedAt"
       orderDirection: "desc"
       limit: $limit
@@ -486,28 +502,43 @@ export const CONTRACT_BATCH_DETAIL_QUERY = gql`
 // RAW RESPONSE TYPES (from Ponder indexer)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export interface RawWalletResponse {
-  stolenWallet: {
-    id: string;
-    caip10: string;
-    registeredAt: string;
-    transactionHash: string;
-    isSponsored: boolean;
-    sourceChainCAIP2?: string;
-  } | null;
+/**
+ * A stolen wallet row.
+ *
+ * `id` is the FULL bytes32 identifier from the contract event, NOT an address — non-EVM
+ * namespaces use all 32 bytes. Use `walletAddress` (null for non-EVM) for the address.
+ *
+ * `caip10` uses the wildcard chain reference for EVM wallets ("eip155:*:0x…") because the
+ * registry's wallet key is chain-wildcarded. Use `reportedChainCAIP2` for the chain the
+ * incident was reported on.
+ */
+export interface RawWalletItem {
+  id: string;
+  walletAddress: string | null;
+  caip10: string;
+  registeredAt: string;
+  transactionHash: string;
+  isSponsored: boolean;
+  sourceChainCAIP2?: string | null;
+  reportedChainCAIP2?: string | null;
 }
 
-export interface RawWalletByCAIP10Response {
+/** Also the response shape for `WALLET_BY_CAIP10_QUERY`, whenever that lookup is re-enabled. */
+export interface RawWalletResponse {
   stolenWallets: {
-    items: Array<{
-      id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      isSponsored: boolean;
-      sourceChainCAIP2?: string;
-    }>;
+    items: RawWalletItem[];
   };
+}
+
+/**
+ * Ponder's cursor envelope on a plural query.
+ *
+ * Optional because tests and older stubs return bare `{ items }`; an absent `pageInfo` is
+ * read as "no further pages", which stops the loop rather than looping forever on undefined.
+ */
+export interface RawPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
 }
 
 export interface RawTransactionResponse {
@@ -517,10 +548,12 @@ export interface RawTransactionResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
+      /** uint256 batch ID as a DECIMAL string, not hex. */
       batchId: string | null;
       reporter: string;
       reportedAt: string;
     }>;
+    pageInfo?: RawPageInfo;
   };
 }
 
@@ -530,10 +563,12 @@ export interface RawContractResponse {
       contractAddress: string;
       caip2ChainId: string;
       numericChainId?: number;
+      /** uint256 batch ID as a DECIMAL string, not hex. */
       batchId: string;
       operator: string;
       reportedAt: string;
     }>;
+    pageInfo?: RawPageInfo;
   };
 }
 
@@ -593,16 +628,8 @@ export interface RawRegistryStatsResponse {
 
 export interface RawRecentWalletsResponse {
   stolenWallets: {
-    items: Array<{
-      id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      isSponsored: boolean;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      batchId?: string;
-    }>;
+    /** RECENT_WALLETS_QUERY selects every RawWalletItem field plus the batch columns. */
+    items: Array<RawWalletItem & { operator?: string; batchId?: string }>;
   };
 }
 
@@ -632,6 +659,13 @@ export interface RawRecentTransactionsResponse {
       operatorId?: string;
       registeredAt: string;
       transactionHash: string;
+      /**
+       * Cross-chain provenance. NULL for a batch registered directly on the hub — that is the
+       * discriminator, since nothing else on the row distinguishes a spoke delivery from a
+       * local registration. See `transactionBatch` in the indexer schema.
+       */
+      sourceChainCAIP2?: string | null;
+      messageId?: string | null;
     }>;
   };
 }
@@ -693,38 +727,11 @@ export interface RawWalletBatchOnlyResponse {
 
 export interface RawWalletEntriesByTxHashResponse {
   stolenWallets: {
-    items: Array<{
-      id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      reportedChainCAIP2?: string;
-    }>;
-  };
-}
-
-export interface RawWalletBatchDetailResponse {
-  walletBatch: {
-    id: string;
-    operatorId: string;
-    operator: string;
-    reportedChainCAIP2?: string;
-    walletCount: number;
-    registeredAt: string;
-    transactionHash: string;
-  } | null;
-  stolenWallets: {
-    items: Array<{
-      id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      reportedChainCAIP2?: string;
-    }>;
+    /**
+     * `isSponsored` is omitted deliberately — WALLET_ENTRIES_BY_TX_HASH_QUERY does not
+     * select it, so typing it as present would misrepresent the response.
+     */
+    items: Array<Omit<RawWalletItem, 'isSponsored'> & { operator?: string }>;
   };
 }
 
@@ -740,35 +747,20 @@ export interface RawTransactionBatchOnlyResponse {
     operatorId?: string;
     registeredAt: string;
     transactionHash: string;
+    /**
+     * Cross-chain provenance, all four NULL for a hub-registered batch — see
+     * {@link RawRecentTransactionsResponse}. `sourceChainId` is null rather than 0 when the
+     * source chain is unknown to @swr/chains; `sourceChainCAIP2` is only ever set when the
+     * chain actually resolved.
+     */
+    sourceChainId?: number | null;
+    sourceChainCAIP2?: string | null;
+    bridgeId?: number | null;
+    messageId?: string | null;
   } | null;
 }
 
 export interface RawTransactionEntriesByTxHashResponse {
-  transactionInBatchs: {
-    items: Array<{
-      id: string;
-      txHash: string;
-      caip2ChainId: string;
-      numericChainId?: number;
-      reporter: string;
-      reportedAt: string;
-    }>;
-  };
-}
-
-export interface RawTransactionBatchDetailResponse {
-  transactionBatch: {
-    id: string;
-    dataHash: string;
-    reporter: string;
-    reportedChainCAIP2?: string;
-    transactionCount: number;
-    isSponsored: boolean;
-    isOperator: boolean;
-    operatorId?: string;
-    registeredAt: string;
-    transactionHash: string;
-  } | null;
   transactionInBatchs: {
     items: Array<{
       id: string;

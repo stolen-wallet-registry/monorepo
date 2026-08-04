@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState, useEffect, useCallback } from 'react';
 import { GracePeriodTimer } from './GracePeriodTimer';
+import { getGracePeriodStatus } from './status';
 import { Button } from '@swr/ui';
 import { formatTimeRemaining } from '@/lib/blocks';
 
@@ -54,19 +55,20 @@ function LiveCountdown({ initialSeconds = 30 }: { initialSeconds?: number }) {
     if (!isRunning || totalMs <= 0) return;
 
     const interval = setInterval(() => {
-      setTotalMs((prev) => {
-        const next = prev - 1000;
-        if (next <= 0) {
-          setIsRunning(false);
-          return 0;
-        }
-        return next;
-      });
+      // Pure updater: decrement only. Stopping the timer is handled by the effect below,
+      // because a state updater can run more than once for a single update.
+      setTotalMs((prev) => Math.max(0, prev - 1000));
     }, 1000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- totalMs checked in early return, functional updater handles state
   }, [isRunning]);
+
+  useEffect(() => {
+    if (isRunning && totalMs <= 0) {
+      setIsRunning(false);
+    }
+  }, [isRunning, totalMs]);
 
   const timeRemaining = formatTimeRemaining(totalMs);
   const isExpired = totalMs <= 0;
@@ -79,8 +81,7 @@ function LiveCountdown({ initialSeconds = 30 }: { initialSeconds?: number }) {
         timeRemaining={timeRemaining}
         totalMs={totalMs}
         blocksLeft={blocksLeft}
-        isExpired={isExpired}
-        isRunning={isRunning}
+        status={getGracePeriodStatus({ isExpired, isRunning, isWaitingForBlock: false })}
         initialTotalMs={initialMs}
       />
       <div className="flex gap-2 justify-center">
@@ -129,8 +130,7 @@ export const Default: Story = {
     },
     totalMs: 222_000, // 3:42
     blocksLeft: 19n,
-    isExpired: false,
-    isRunning: true,
+    status: 'running',
     initialTotalMs: 300_000, // 5 minutes total
   },
 };
@@ -149,8 +149,7 @@ export const WithHours: Story = {
     },
     totalMs: 5_025_000, // 1:23:45
     blocksLeft: 419n,
-    isExpired: false,
-    isRunning: true,
+    status: 'running',
     initialTotalMs: 7_200_000, // 2 hours total
   },
 };
@@ -170,8 +169,7 @@ export const AlmostExpired: Story = {
     },
     totalMs: 23_000, // 23 seconds
     blocksLeft: 2n,
-    isExpired: false,
-    isRunning: true,
+    status: 'running',
     initialTotalMs: 300_000,
   },
 };
@@ -190,8 +188,7 @@ export const Expired: Story = {
     },
     totalMs: 0,
     blocksLeft: 0n,
-    isExpired: true,
-    isRunning: false,
+    status: 'expired',
     initialTotalMs: 300_000,
   },
 };
@@ -210,9 +207,7 @@ export const Loading: Story = {
     },
     totalMs: 0,
     blocksLeft: 0n,
-    isExpired: false,
-    isRunning: false,
-    isLoading: true,
+    status: 'loading',
   },
 };
 
@@ -230,8 +225,7 @@ export const Paused: Story = {
     },
     totalMs: 135_000,
     blocksLeft: 11n,
-    isExpired: false,
-    isRunning: false,
+    status: 'paused',
     initialTotalMs: 300_000,
   },
 };
@@ -250,8 +244,7 @@ export const SingleBlock: Story = {
     },
     totalMs: 12_000,
     blocksLeft: 1n,
-    isExpired: false,
-    isRunning: true,
+    status: 'running',
     initialTotalMs: 300_000,
   },
 };
@@ -271,9 +264,7 @@ export const WaitingForBlock: Story = {
     },
     totalMs: 0,
     blocksLeft: 2n, // Still 2 blocks remaining on chain
-    isExpired: false,
-    isRunning: false,
-    isWaitingForBlock: true,
+    status: 'waiting-for-block',
     initialTotalMs: 300_000,
   },
 };

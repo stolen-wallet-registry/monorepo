@@ -70,8 +70,12 @@ export function caip2ToBytes32(caip2: string): Hex {
   if (chainId === null) {
     throw new Error(`Unsupported or invalid CAIP-2 format: ${caip2}`);
   }
-  // Hash the validated string directly (equivalent to toCAIP2(chainId))
-  return computeCAIP2Hash(caip2);
+  // Hash the CANONICAL form, not the caller's string. These are not the same thing for any
+  // non-canonical spelling — `keccak256("eip155:08453") !== keccak256("eip155:8453")` — and
+  // the result is written to permanent on-chain storage, where a non-canonical hash matches
+  // no chain and cannot be corrected. Re-deriving from the parsed chain ID makes this
+  // function correct by construction rather than by trusting its input.
+  return computeCAIP2Hash(toCAIP2(chainId));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

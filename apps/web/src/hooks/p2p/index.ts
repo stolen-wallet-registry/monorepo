@@ -1,17 +1,4 @@
 export {
-  useP2PConnection,
-  type UseP2PConnectionOptions,
-  type UseP2PConnectionResult,
-} from './useP2PConnection';
-
-export {
-  useP2PSignatureRelay,
-  type UseP2PSignatureRelayOptions,
-  type UseP2PSignatureRelayResult,
-  type P2PRole,
-} from './useP2PSignatureRelay';
-
-export {
   useP2PKeepAlive,
   type UseP2PKeepAliveOptions,
   type UseP2PKeepAliveResult,

@@ -24,6 +24,7 @@ import { ChainIcon } from '@/components/composed/ChainIcon';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
+import { useP2PStore } from '@/stores/p2pStore';
 import { clearAllTxSignatures, computeTransactionDataHash } from '@/lib/signatures/transactions';
 import type { Hash } from '@/lib/types/ethereum';
 import {
@@ -100,6 +101,9 @@ export function TxSuccessStep() {
     });
     resetRegistration();
     formStore.reset();
+    // Clear persisted P2P state too. partnerPeerId is persisted and the peer guard pins on
+    // it — a stale pin from a completed flow silently rejects the NEXT partner's CONNECT.
+    useP2PStore.getState().reset();
     clearAllTxSignatures();
     setLocation('/');
   };
@@ -114,6 +118,7 @@ export function TxSuccessStep() {
     });
     resetRegistration();
     formStore.reset();
+    useP2PStore.getState().reset();
     clearAllTxSignatures();
     setLocation('/register/transactions');
   };

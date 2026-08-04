@@ -51,6 +51,45 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_CROSS_CHAIN_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -164,6 +203,56 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'activateHubConfig',
+    inputs: [
+      {
+        name: '_hubChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubInbox',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'bridgeAdapter',
     inputs: [],
     outputs: [
@@ -187,6 +276,26 @@ export const SpokeRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -253,89 +362,6 @@ export const SpokeRegistryABI = [
         name: '',
         type: 'address',
         internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'generateHashStruct',
-    inputs: [
-      {
-        name: 'reportedChainId',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: 'incidentTimestamp',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: 'trustedForwarder',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'generateTransactionHashStruct',
-    inputs: [
-      {
-        name: 'dataHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'reportedChainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'transactionCount',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'trustedForwarder',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -432,6 +458,40 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getTransactionAcknowledgement',
     inputs: [
       {
@@ -521,6 +581,45 @@ export const SpokeRegistryABI = [
         name: 'isExpired',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getTransactionSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -636,6 +735,44 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -646,6 +783,37 @@ export const SpokeRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeHubConfig',
+    inputs: [
+      {
+        name: '_hubChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubInbox',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -709,6 +877,66 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'quoteTransactionBatchFeeBreakdown',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        internalType: 'struct ISpokeRegistry.FeeBreakdown',
+        components: [
+          {
+            name: 'bridgeFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'registrationFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'total',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'bridgeName',
+            type: 'string',
+            internalType: 'string',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'quoteTransactionBatchRegistration',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'register',
     inputs: [
       {
@@ -738,6 +966,11 @@ export const SpokeRegistryABI = [
       },
       {
         name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'windowBlock',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -795,6 +1028,11 @@ export const SpokeRegistryABI = [
         internalType: 'bytes32[]',
       },
       {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
         name: 'v',
         type: 'uint8',
         internalType: 'uint8',
@@ -840,6 +1078,19 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'sourceChainId',
     inputs: [],
     outputs: [
@@ -866,6 +1117,25 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'txNonces',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'withdrawFees',
     inputs: [
       {
@@ -884,8 +1154,72 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FeesWithdrawn',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -968,6 +1302,12 @@ export const SpokeRegistryABI = [
         internalType: 'uint32',
       },
     ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
     anonymous: false,
   },
   {
@@ -1137,12 +1477,42 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__AlreadyAcknowledged',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__BatchCountMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__BatchTooLarge',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__ChainIdMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__DataHashMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__DataMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__DeadlineTooFarInFuture',
     inputs: [],
   },
   {
@@ -1183,6 +1553,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__InvalidHubConfig',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidIncidentTimestamp',
     inputs: [],
   },
   {
@@ -1240,5 +1615,65 @@ export const SpokeRegistryABI = [
         internalType: 'string',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
+    inputs: [],
   },
 ] as const;

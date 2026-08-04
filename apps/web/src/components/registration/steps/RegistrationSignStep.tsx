@@ -15,7 +15,10 @@ import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
-import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
+import { storeSignature, removeSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -35,6 +38,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   const chainId = useChainId();
   const { registrationType } = useRegistrationStore();
   const { registeree, relayer } = useFormStore();
+  const { resetFlow } = useStepNavigation();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
@@ -74,6 +78,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     nonce,
     isLoading: nonceLoading,
     isError: nonceError,
+    refetch: refetchNonce,
   } = useContractNonce(registeree ?? undefined);
   const {
     data: hashStructData,
@@ -83,6 +88,11 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   } = useGenerateHashStruct(forwarder ?? undefined, SIGNATURE_STEP.REGISTRATION);
 
   const { signRegistration, reset: resetSigning } = useSignEIP712();
+
+  // The registration signature commits to the hash of a block at or after the acknowledgement's
+  // grace-period start. Passing the start block lets the signer refuse early rather than
+  // producing a signature the contract will reject.
+  const { data: deadlines } = useContractDeadlines(registeree ?? undefined);
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
@@ -133,12 +143,31 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
       return;
     }
 
-    // Refetch to get fresh deadline
-    logger.contract.debug('Refetching hash struct for fresh registration deadline');
-    const refetchResult = await refetchHashStruct();
-    // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
-    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+    // Refetch nonce and deadline together - do not use stale data.
+    // CRITICAL: acknowledge() increments nonces[registeree], so the nonce cached by
+    // useContractNonce (staleTime 30s) is one behind by the time we reach this step.
+    // Signing with it produces a signature that reverts with WalletRegistry__InvalidNonce.
+    logger.contract.debug('Refetching nonce and hash struct for fresh registration data');
+    const [nonceResult, refetchResult] = await Promise.all([refetchNonce(), refetchHashStruct()]);
+
+    const freshNonce = nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
+
+    if (freshNonce === undefined) {
+      logger.signature.error('Failed to get fresh nonce', {
+        nonceStatus: nonceResult.status,
+        nonceError: nonceResult.error?.message,
+      });
+      setSignatureError('Failed to load fresh nonce. Please try again.');
+      setSignatureStatus('error');
+      return;
+    }
+
+    // Refetch returns the raw contract value: a bare uint256 deadline. (It used to be a
+    // [deadline, hashStruct] tuple; the hash struct was removed because the registration
+    // typehash commits to a windowBlockHash this call cannot know.) Reading it as a tuple
+    // would silently yield undefined and fall back to the cached, staler deadline.
+    const freshDeadline =
+      typeof refetchResult?.data === 'bigint' ? refetchResult.data : hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');
@@ -159,35 +188,50 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         forwarder,
         reportedChainId: reportedChainId.toString(),
         incidentTimestamp: incidentTimestamp.toString(),
-        nonce: nonce.toString(),
+        nonce: freshNonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
 
-      const sig = await signRegistration({
+      const {
+        signature: sig,
+        windowBlock,
+        windowBlockHash,
+      } = await signRegistration({
         wallet: registeree,
         trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
-        nonce,
+        nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart: deadlines?.start,
       });
 
       logger.signature.info('Registration signature obtained', {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
+        windowBlock: windowBlock.toString(),
       });
 
       // Store signature with stabilized fields (same values used for signing)
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
-        nonce,
+        nonce: freshNonce,
         address: registeree,
         chainId,
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
+        // Bind the cached signature to the forwarder it was signed over, so editing the gas
+        // wallet afterwards invalidates it here instead of on-chain.
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
+        // The pay step must submit the block that was signed over, not re-derive one.
+        windowBlock,
+        // Stored alongside it for the same reason `TxRegisterSignStep` does: this is the value
+        // actually inside the signed struct, and anything re-deriving the digest later cannot
+        // read it back off-chain once the chain has moved past the 256-block `blockhash` window.
+        windowBlockHash,
       });
       logger.signature.debug('Registration signature stored in sessionStorage');
 
@@ -214,7 +258,14 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
    * Handle retry after signing error.
    */
   const handleRetry = () => {
+    // Discard any stored signature before retrying. A signature that failed (typically a
+    // stale nonce) is permanently unusable, and leaving it in sessionStorage means the
+    // payment step can pick the bad one up again instead of the freshly signed replacement.
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
     resetSigning();
+    setSignature(null);
     setSignatureStatus('idle');
     setSignatureError(null);
   };
@@ -232,12 +283,9 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   // Missing form data
   if (!registeree || !forwarder) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 

@@ -6,14 +6,15 @@
 
 import type { ReactNode } from 'react';
 
-import {
-  InitialFormStep,
-  AcknowledgementPayStep,
-  GracePeriodStep,
-  RegistrationSignStep,
-  RegistrationPayStep,
-  SuccessStep,
-} from './steps';
+// Imported per-module rather than from './steps': that barrel also re-exports the
+// five P2P step components, which this renderer never uses but would otherwise
+// pull into the standard/self-relay bundle.
+import { InitialFormStep } from './steps/InitialFormStep';
+import { AcknowledgementPayStep } from './steps/AcknowledgementPayStep';
+import { GracePeriodStep } from './steps/GracePeriodStep';
+import { RegistrationSignStep } from './steps/RegistrationSignStep';
+import { RegistrationPayStep } from './steps/RegistrationPayStep';
+import { SuccessStep } from './steps/SuccessStep';
 import type { RegistrationStep } from '@/stores/registrationStore';
 
 export interface StepRendererProps {

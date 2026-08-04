@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { formatTimestamp } from '@swr/search';
 import { render, screen, userEvent } from '@/test/test-utils';
 import { SignatureCard, type SignatureData } from './SignatureCard';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
@@ -7,7 +8,7 @@ import type { Hex } from '@/lib/types/ethereum';
 describe('SignatureCard', () => {
   const sampleData: SignatureData = {
     registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
-    trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+    trustedForwarder: '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0',
     nonce: 0n,
     deadline: 12345678n,
   };
@@ -46,7 +47,8 @@ describe('SignatureCard', () => {
       expect(screen.getByText('Nonce:')).toBeInTheDocument();
       expect(screen.getByText('Deadline:')).toBeInTheDocument();
       expect(screen.getByText('0')).toBeInTheDocument(); // nonce
-      expect(screen.getByText('Block 12345678')).toBeInTheDocument();
+      // Rendered as a locale-formatted time (the deadline is a Unix timestamp, not a block)
+      expect(screen.getByText(formatTimestamp(sampleData.deadline))).toBeInTheDocument();
     });
   });
 

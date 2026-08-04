@@ -2,6 +2,11 @@
 lib/
 node_modules/
 
+# Vendored third-party interfaces — upstream code, kept as close to the source as
+# possible so it can be diffed on refresh. Our house style is not upstream's.
+# See src/vendor/hyperlane/README.md.
+src/vendor/
+
 # Build artifacts
 out/
 cache/

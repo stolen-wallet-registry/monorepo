@@ -608,8 +608,9 @@ contract ContractRegistryTest is Test {
         bytes32 packed = vm.load(address(registry), reads[0]);
         assertNotEq(packed, bytes32(0), "ContractEntry should be populated");
 
-        // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
-        assertEq(vm.load(address(registry), nextSlot), bytes32(0), "ContractEntry overflowed to second slot");
+        // Deliberately NOT asserted: that slot+1 is zero. Entry slots are keccak-derived, so the
+        // neighbouring slot is unallocated whatever the struct's size — that assertion held for a
+        // two-slot struct too and read as a second, independent proof of the invariant while
+        // proving nothing. The vm.record()/reads.length check above is the real proof.
     }
 }

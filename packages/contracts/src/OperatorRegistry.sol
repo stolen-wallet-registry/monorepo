@@ -123,6 +123,16 @@ contract OperatorRegistry is IOperatorRegistry, TimelockOwnable {
     }
 
     /// @inheritdoc IOperatorRegistry
+    /// @dev ESCALATION (granting a capability the operator does not already hold) is a
+    ///      trust-boundary change and is timelocked after completeSetup(). Without this, the
+    ///      2-day delay on {approveOperator} was fully bypassable: approve an operator with a
+    ///      benign capability through the timelocked path, then escalate to ALL_REGISTRIES in
+    ///      one transaction — granting instant access to
+    ///      `ContractRegistry.registerContractsFromOperator`, which is operator-only precisely
+    ///      because it has no two-phase EIP-712 protection.
+    ///
+    ///      REDUCTION (narrowing to a subset of the currently-held bits) stays immediate,
+    ///      matching {revokeOperator}: it is an emergency action that only removes access.
     function updateCapabilities(address operator, uint8 capabilities) external override onlyOwner {
         if (operator == address(0)) revert OperatorRegistry__ZeroAddress();
         if (capabilities == 0 || capabilities > ALL_REGISTRIES) {
@@ -132,6 +142,40 @@ contract OperatorRegistry is IOperatorRegistry, TimelockOwnable {
         Operator storage op = _operators[operator];
         if (!op.approved) revert OperatorRegistry__NotApproved();
 
+        // Any bit set in the new mask that is not set in the old one is an escalation.
+        bool isEscalation = (capabilities & ~op.capabilities) != 0;
+        if (isEscalation && setupComplete) revert TimelockOwnable__UseTimelockedPath();
+
+        _updateCapabilitiesInternal(operator, capabilities);
+    }
+
+    /// @notice Propose a capability escalation (2-day delay before activation)
+    /// @dev Only needed for escalation; reductions go straight through {updateCapabilities}.
+    /// @param operator Address of the approved operator
+    /// @param capabilities New bitmask of registry capabilities (1=wallet, 2=tx, 4=contract)
+    function proposeCapabilities(address operator, uint8 capabilities) external onlyOwner {
+        if (operator == address(0)) revert OperatorRegistry__ZeroAddress();
+        if (capabilities == 0 || capabilities > ALL_REGISTRIES) {
+            revert OperatorRegistry__InvalidCapabilities();
+        }
+        _proposeAction(keccak256(abi.encode("updateCapabilities", operator, capabilities)));
+    }
+
+    /// @notice Activate a previously proposed capability escalation
+    /// @param operator Address of the approved operator
+    /// @param capabilities New bitmask of registry capabilities (1=wallet, 2=tx, 4=contract)
+    function activateCapabilities(address operator, uint8 capabilities) external onlyOwner {
+        _activateAction(keccak256(abi.encode("updateCapabilities", operator, capabilities)));
+
+        // Re-check approval at activation: the operator may have been revoked during the delay,
+        // and silently re-granting capabilities to a revoked operator would defeat the revoke.
+        if (!_operators[operator].approved) revert OperatorRegistry__NotApproved();
+
+        _updateCapabilitiesInternal(operator, capabilities);
+    }
+
+    function _updateCapabilitiesInternal(address operator, uint8 capabilities) internal {
+        Operator storage op = _operators[operator];
         uint8 oldCapabilities = op.capabilities;
         op.capabilities = capabilities;
 

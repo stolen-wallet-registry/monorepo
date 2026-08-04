@@ -19,7 +19,6 @@ export {
   storeTxSignature,
   getTxSignature,
   removeTxSignature,
-  clearTxSignatures,
   clearAllTxSignatures,
   type StoredTxSignature,
 } from './storage';

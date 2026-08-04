@@ -32,7 +32,6 @@ library Salts {
     // ═══════════ Local-only (not deployed on testnet/mainnet) ═══════════
     bytes32 internal constant MOCK_AGGREGATOR = keccak256("SWR.MockAggregator");
     bytes32 internal constant MOCK_AGGREGATOR_SPOKE = keccak256("SWR.Spoke.MockAggregator");
-    bytes32 internal constant MOCK_GAS_PAYMASTER = keccak256("SWR.MockGasPaymaster");
     bytes32 internal constant MULTICALL3 = keccak256("SWR.Multicall3");
     bytes32 internal constant MULTICALL3_SPOKE = keccak256("SWR.Spoke.Multicall3");
 }

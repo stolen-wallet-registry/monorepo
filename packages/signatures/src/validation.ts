@@ -2,7 +2,7 @@
  * Signature parsing and validation utilities.
  */
 
-import { hexToSignature, type Hex } from 'viem';
+import { parseSignature as parseSignatureHex, type Hex } from 'viem';
 
 /**
  * Parsed signature components for contract calls.
@@ -21,9 +21,11 @@ export interface ParsedSignature {
  * @returns Parsed signature components
  */
 export function parseSignature(signature: Hex): ParsedSignature {
-  const { v, r, s } = hexToSignature(signature);
+  const { v, r, s, yParity } = parseSignatureHex(signature);
+  // viem omits `v` entirely when the trailing byte is yParity (0/1) rather than 27/28,
+  // which some hardware and smart-account signers emit.
   return {
-    v: Number(v),
+    v: Number(v ?? BigInt(yParity + 27)),
     r,
     s,
   };

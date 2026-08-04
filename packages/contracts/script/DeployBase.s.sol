@@ -18,14 +18,16 @@ abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Get timing configuration for a chain
-    /// @dev Block counts adjusted per-chain for consistent UX (~2 min grace, ~10 min deadline)
+    /// @dev Block counts adjusted per-chain for consistent UX (~2 min grace, ~10 min deadline).
+    ///      CALIBRATE TO THE RATE `block.number` ACTUALLY TICKS AT, not the chain's block time —
+    ///      on Arbitrum those are different things. See {TimingConfig} for the full note.
     ///
-    ///      | Chain          | Block Time | Grace Blocks | Deadline Blocks | Result           |
-    ///      |----------------|------------|--------------|-----------------|------------------|
-    ///      | Anvil (local)  | 13s        | 2            | 50              | ~30s / ~10 min   |
-    ///      | Base/Optimism  | 2s         | 60           | 300             | ~2 min / ~10 min |
-    ///      | Arbitrum       | 0.25s      | 480          | 2400            | ~2 min / ~10 min |
-    ///      | Ethereum L1    | 12s        | 10           | 50              | ~2 min / ~10 min |
+    ///      | Chain          | `block.number` ticks at | Grace | Deadline | Result           |
+    ///      |----------------|-------------------------|-------|----------|------------------|
+    ///      | Anvil (local)  | 13s  (local blocks)     | 2     | 50       | ~30s  / ~10 min  |
+    ///      | Base/Optimism  | 2s   (L2 blocks)        | 60    | 300      | ~2 min / ~10 min |
+    ///      | Ethereum L1    | 12s  (L1 blocks)        | 10    | 50       | ~2 min / ~10 min |
+    ///      | Arbitrum       | ~12s (L1 blocks!)       | 10    | 50       | ~2 min / ~10 min |
     ///
     /// @param chainId The chain ID to get timing config for
     /// @return graceBlocks Base blocks for grace period
@@ -46,9 +48,16 @@ abstract contract DeployBase is Script {
             return (60, 300);
         }
 
-        // Arbitrum One/Sepolia (0.25s blocks)
+        // Arbitrum One/Sepolia: `block.number` returns the **L1** block number (~12s), NOT the
+        // ~0.25s L2 rate. Verified empirically 2026-07-30 against Arbitrum One mainnet:
+        //   eth_blockNumber (RPC)      = 489,269,716  <- L2 block number
+        //   block.number in a contract =  25,645,219  <- L1 block number
+        //   ArbSys.arbBlockNumber()    = 489,269,728  <- L2 block number
+        // So Arbitrum takes the SAME counts as Ethereum L1. The previous (480, 2400) assumed the
+        // L2 rate and produced a ~96 MINUTE grace period and an ~8 HOUR registration window.
+        // Matches Deploy.s.sol's ARBITRUM_* constants and {TimingConfig}'s recommendation.
         if (chainId == 42_161 || chainId == 421_614) {
-            return (480, 2400);
+            return (10, 50);
         }
 
         // Polygon mainnet/Amoy (2s blocks)

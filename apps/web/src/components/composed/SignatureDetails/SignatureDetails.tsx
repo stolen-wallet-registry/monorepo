@@ -6,6 +6,7 @@
  */
 
 import { Badge } from '@swr/ui';
+import { formatTimestamp } from '@swr/search';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { getChainShortName } from '@/lib/explorer';
@@ -20,7 +21,7 @@ export interface SignatureDetailsData {
   trustedForwarder: Address;
   /** Signature nonce */
   nonce: bigint;
-  /** Block deadline for signature validity */
+  /** Unix timestamp (seconds) after which the signature expires */
   deadline: bigint;
   /** Chain ID where signature is valid */
   chainId?: number;
@@ -72,7 +73,12 @@ export function SignatureDetails({
           {registereeLabel}
           <InfoTooltip content={registereeTooltip} size="sm" />
         </span>
-        <EnsExplorerLink value={data.registeree} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink
+          value={data.registeree}
+          type="address"
+          resolveEns={false}
+          showDisabledIcon={false}
+        />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">
@@ -82,7 +88,12 @@ export function SignatureDetails({
             size="sm"
           />
         </span>
-        <EnsExplorerLink value={data.trustedForwarder} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink
+          value={data.trustedForwarder}
+          type="address"
+          resolveEns={false}
+          showDisabledIcon={false}
+        />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">
@@ -98,11 +109,14 @@ export function SignatureDetails({
         <span className="text-muted-foreground flex items-center gap-1">
           Deadline:
           <InfoTooltip
-            content="The block number after which this signature expires. This prevents old signatures from being used maliciously."
+            content="The time after which this signature expires. This prevents old signatures from being used maliciously."
             size="sm"
           />
         </span>
-        <span>Block {data.deadline.toString()}</span>
+        {/* A timestamp, not a block number: the signature deadline comes from
+            TimingConfig.getSignatureDeadline() (block.timestamp + window) and the contract
+            compares it against block.timestamp. Only the grace period is measured in blocks. */}
+        <span>{formatTimestamp(data.deadline)}</span>
       </div>
     </div>
   );

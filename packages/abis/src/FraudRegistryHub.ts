@@ -34,6 +34,19 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -67,6 +80,19 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'activateTransactionRegistry',
     inputs: [
       {
@@ -90,6 +116,25 @@ export const FraudRegistryHubABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -403,6 +448,25 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'pause',
     inputs: [],
     outputs: [],
@@ -472,6 +536,19 @@ export const FraudRegistryHubABI = [
     inputs: [
       {
         name: 'newInbox',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
         type: 'address',
         internalType: 'address',
       },
@@ -973,11 +1050,6 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'error',
-    name: 'FraudRegistryHub__UnknownRegistryType',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'FraudRegistryHub__WithdrawFailed',
     inputs: [],
   },
@@ -1015,7 +1087,17 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
     inputs: [],
   },
   {
@@ -1025,7 +1107,22 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

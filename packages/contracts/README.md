@@ -156,9 +156,41 @@ pnpm deploy:testnet:hub
 # 2. Deploy spoke contracts to Optimism Sepolia
 #    (set HUB_INBOX_ADDRESS and SOULBOUND_RECEIVER in .env.testnet from step 1 output)
 pnpm deploy:testnet:spoke
+
+# 3. Configure trust relationships (see the guide), THEN lock the timelock:
+pnpm finalize:testnet:hub
+
+# 4. Gate: reverts if anything still has setupComplete == false
+pnpm verify:setup:testnet:hub
 ```
 
 After deployment, configure trust relationships via `cast send` and update `@swr/chains` with deployed addresses. See the [Testnet Deployment guide](/dev/testnet-deployment) in the docs for the full walkthrough.
+
+### Finalizing setup (required)
+
+Every `TimelockOwnable` contract starts with `setupComplete == false`, which leaves its
+`onlyDuringSetup` setters — `setWalletRegistry`, `setInbox`, `setTrustedSource`,
+`setHub`, `setOperatorSubmitter`, `setOperatorRegistry`, `setAuthorizedMinter` — callable
+by the owner in a single transaction. **Until `finalizeSetup()` runs, the 2-day timelock
+provides no protection at all**: the propose/activate path exists but is optional.
+
+`finalizeSetup()` is a separate step rather than a tail call inside the deploy functions
+because the inbox's trusted sources can only be wired after the spoke exists. Completing
+setup inside `deployHub()` would permanently lock out `setTrustedSource` before it was
+ever called.
+
+Run it **last**, after all cross-chain trust wiring, then run `verifySetup()` as a gate so
+a forgotten finalize fails loudly instead of shipping an open deployment. Both read the
+deployed addresses from `.env.testnet` (`FRAUD_REGISTRY_HUB`, `CROSS_CHAIN_INBOX`,
+`OPERATOR_REGISTRY`, `SOULBOUND_RECEIVER`, `WALLET_SOULBOUND`, `SUPPORT_SOULBOUND`,
+`WALLET_REGISTRY`, `TRANSACTION_REGISTRY`, `CONTRACT_REGISTRY`, `OPERATOR_SUBMITTER`);
+unset addresses are skipped.
+
+`completeSetup()` is irreversible. Afterwards, trust-boundary changes require
+`propose*` → wait 2 days → `activate*`.
+
+Local deploy scripts deliberately do **not** call it — the dashboard's operator-approval
+flow uses the immediate `approveOperator` path, which locks after setup.
 
 ## Testing
 
@@ -168,6 +200,64 @@ forge test -vvv
 forge coverage
 forge test --gas-report
 ```
+
+### What `forge test` does NOT cover: the live Hyperlane Mailbox
+
+`forge test` runs every Hyperlane test against `test/mocks/MockMailbox.sol`, which proves only
+that the adapter agrees with **our own** copy of the interface. The v2→v3 mismatch this suite
+was later written for shipped exactly that way: the adapter targeted the Hyperlane v2 `IMailbox`
+(non-payable `dispatch`, no `quoteDispatch`) while every live mailbox is v3, and nothing failed,
+because the mock had the same wrong shape. `@hyperlane-xyz/core/` remaps to the vendored
+`src/vendor/hyperlane/`, so those interfaces are in-repo copies that can drift from the
+deployed contract with nothing to notice.
+
+`test/HyperlaneForked.t.sol` is the only test that dials a real v3 Mailbox, and it `vm.skip`s
+itself unless an RPC is set — so in a default run its 4 tests report SKIPPED, not passed:
+
+```bash
+OPTIMISM_SEPOLIA_RPC=https://<your-op-sepolia-rpc> \
+  forge test --match-contract HyperlaneForked -vv
+```
+
+Expect `4 passed; 0 failed; 0 skipped`. A result of `0 passed` or any `[SKIP]` means the check
+did not run. Run it **before any testnet or mainnet deployment** and after any change under
+`src/vendor/hyperlane/`.
+
+`.github/workflows/hyperlane-forked.yml` runs the same suite, but it is **manual only** (Actions
+→ Hyperlane forked integration → Run workflow) and needs an `OPTIMISM_SEPOLIA_RPC` repository
+secret. Nothing runs it on a timer, so nothing will tell you when the vendored interfaces drift
+from the deployed Mailbox — the local command above, run before a deployment, is the real gate.
+
+## Linting
+
+`pnpm lint` runs `solhint 'src/**/*.sol'` followed by `forge fmt --check`. Rule configuration is in
+`.solhint.json`; solhint rejects both comments and unknown top-level keys in that file, so the
+rationale for the non-obvious choices lives here.
+
+**`max-line-length` is off, deliberately.** `forge fmt` is this repo's formatter and owns line
+length (`foundry.toml` `[fmt] line_length = 120`), and `pnpm lint` runs it immediately after
+solhint. Two authorities on formatting is the bug, and they genuinely disagree: solhint rejected
+`src/CrossChainInbox.sol:162` at 121 characters, and wrapping that line made `forge fmt --check`
+emit a diff demanding the exact 121-character line back. The conflict is unfixable while both
+rules are on, so the duplicate rule is removed rather than patched with a per-line exception.
+Line length is still enforced — by `forge fmt`.
+
+**`use-natspec` under-reports; a clean run is not coverage.** The rule appears to require
+`@notice` only once a function already carries other NatSpec tags. In `src/FeeManager.sol`,
+`_withinBounds` (which has `@dev`, `@param` and `@return`) warned for a missing `@notice`, while
+`_isStale` directly below it — carrying `@dev` and nothing else, no `@notice` and no `@param` —
+did not warn at all. Zero `use-natspec` warnings therefore does not mean the file is documented.
+
+**`code-complexity` and `function-max-lines` are left on and left failing** (~22 warnings, 0
+errors). Everything they flag is a two-phase EIP-712 registration validator. Splitting those to
+satisfy a line-count metric is a security-critical refactor with real regression risk and no
+correctness benefit, so the warnings are treated as advisory. They do not fail the build.
+
+Three warnings are suppressed inline at the source with a stated reason — two
+`gas-struct-packing` in `src/spoke/SpokeRegistry.sol` (memory-only stack-limit carriers, never
+written to storage) and one `no-inline-assembly` in `src/soulbound/SoulboundReceiver.sol`
+(bounded 4-byte selector read from revert data). Never add a bare `solhint-disable` without a
+comment saying why the rule does not apply.
 
 ## Security Considerations
 

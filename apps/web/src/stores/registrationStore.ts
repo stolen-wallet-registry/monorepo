@@ -10,12 +10,26 @@ export type { RegistrationType, RegistrationStep } from '@/lib/types/registratio
 // BigInt-safe JSON storage for Zustand persist middleware
 // JSON.stringify throws on BigInt - this provides custom serialization
 const BIGINT_PREFIX = '__bigint__:';
+/**
+ * A prefixed value whose suffix is not a valid integer literal.
+ *
+ * `BigInt('abc')` throws a SyntaxError, and the reviver runs INSIDE `JSON.parse`, so an
+ * unguarded conversion made `getItem` throw for the whole blob. This is the only store with a
+ * custom storage, so it is the only one whose hydration can fail before its validating `merge`
+ * ever runs — the user mid-flow silently lost `step`, both transaction hashes and both incident
+ * fields with a paid acknowledgement live on chain. Returning the raw string instead lets
+ * `merge` see a non-bigint where a bigint belongs and substitute the initial value.
+ */
+const BIGINT_SUFFIX = /^-?\d+$/;
 const bigintStorage = createJSONStorage(() => localStorage, {
   replacer: (_key, value) => (typeof value === 'bigint' ? `${BIGINT_PREFIX}${value}` : value),
-  reviver: (_key, value) =>
-    typeof value === 'string' && value.startsWith(BIGINT_PREFIX)
-      ? BigInt(value.slice(BIGINT_PREFIX.length))
-      : value,
+  reviver: (_key, value) => {
+    if (typeof value !== 'string' || !value.startsWith(BIGINT_PREFIX)) {
+      return value;
+    }
+    const suffix = value.slice(BIGINT_PREFIX.length);
+    return BIGINT_SUFFIX.test(suffix) ? BigInt(suffix) : value;
+  },
 });
 
 export interface RegistrationState {
@@ -58,6 +72,40 @@ const initialState: RegistrationState = {
   bridgeMessageId: null,
   reportedChainId: null,
   incidentTimestamp: null,
+};
+
+const VALID_REGISTRATION_TYPES: RegistrationType[] = ['standard', 'selfRelay', 'p2pRelay'];
+
+// MUST be declared BEFORE the create() call below. zustand's persist middleware hydrates
+// synchronously for localStorage, so `merge` runs during module evaluation — a reference to
+// a `const` declared later in the file throws a temporal-dead-zone ReferenceError, which
+// zustand silently swallows, and the store NEVER rehydrates persisted state.
+export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
+  standard: [
+    'acknowledge-and-sign',
+    'acknowledge-and-pay',
+    'grace-period',
+    'register-and-sign',
+    'register-and-pay',
+    'success',
+  ],
+  selfRelay: [
+    'acknowledge-and-sign',
+    'switch-and-pay-one',
+    'grace-period',
+    'register-and-sign',
+    'switch-and-pay-two',
+    'success',
+  ],
+  p2pRelay: [
+    'wait-for-connection',
+    'acknowledge-and-sign',
+    'acknowledgement-payment',
+    'grace-period',
+    'register-and-sign',
+    'registration-payment',
+    'success',
+  ],
 };
 
 export const useRegistrationStore = create<RegistrationState & RegistrationActions>()(
@@ -153,33 +201,64 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       {
         name: 'swr-registration-state',
         storage: bigintStorage, // BigInt-safe serialization for incidentTimestamp
-        version: 2, // Bumped for incident fields
-        migrate: (persisted, version) => {
+        version: 1,
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
+        // Validation lives in `merge`, not `migrate`: zustand only calls `migrate` on a
+        // version mismatch, so validation placed there never runs on a normal reload.
+        // `merge` runs on EVERY rehydrate and supplies a default for every field.
+        merge: (persisted, current) => {
           // Validate basic shape
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<RegistrationState>;
 
-          // Migration from v1 to v2: add incident fields
-          if (version < 2) {
-            logger.registration.info('Migrating registration state from v1 to v2');
-          }
+          // Validate registrationType and step against the known sequences (mirrors
+          // transactionRegistrationStore). An unknown step would otherwise flow into
+          // StepRenderer's Record lookup and render a blank page with no recovery control.
+          const isValidRegistrationType =
+            state.registrationType &&
+            VALID_REGISTRATION_TYPES.includes(state.registrationType as RegistrationType);
+          const finalRegistrationType = isValidRegistrationType
+            ? (state.registrationType as RegistrationType)
+            : initialState.registrationType;
+          const validSteps = STEP_SEQUENCES[finalRegistrationType];
+          const isValidStep =
+            state.step === null ||
+            (state.step && validSteps.includes(state.step as RegistrationStep));
 
           // Ensure all required fields exist with fallbacks
           return {
-            registrationType: state.registrationType ?? initialState.registrationType,
-            step: state.step ?? initialState.step,
+            ...current,
+            registrationType: finalRegistrationType,
+            step: isValidStep ? (state.step as RegistrationStep | null) : initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
             acknowledgementChainId:
               state.acknowledgementChainId ?? initialState.acknowledgementChainId,
             registrationHash: state.registrationHash ?? initialState.registrationHash,
             registrationChainId: state.registrationChainId ?? initialState.registrationChainId,
             bridgeMessageId: state.bridgeMessageId ?? initialState.bridgeMessageId,
-            // Incident fields (null if migrating from v1)
-            reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-            incidentTimestamp: state.incidentTimestamp ?? initialState.incidentTimestamp,
+            // Incident fields (null if migrating from v1).
+            //
+            // Type-checked, not merely defaulted: the bigint reviver hands back the raw string
+            // for a corrupt `__bigint__:` value rather than letting `BigInt()` throw out of
+            // `JSON.parse` and take the whole rehydrate with it. That leaves a string sitting
+            // where a bigint belongs, which would reach `useAcknowledgement` as a contract
+            // argument. This is where it gets dropped.
+            reportedChainId:
+              typeof state.reportedChainId === 'bigint'
+                ? state.reportedChainId
+                : initialState.reportedChainId,
+            incidentTimestamp:
+              typeof state.incidentTimestamp === 'bigint'
+                ? state.incidentTimestamp
+                : initialState.incidentTimestamp,
           };
         },
       }
@@ -197,35 +276,6 @@ function getInitialStep(type: RegistrationType): RegistrationStep {
       return 'wait-for-connection';
   }
 }
-
-// Step sequences for each registration type
-export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
-  standard: [
-    'acknowledge-and-sign',
-    'acknowledge-and-pay',
-    'grace-period',
-    'register-and-sign',
-    'register-and-pay',
-    'success',
-  ],
-  selfRelay: [
-    'acknowledge-and-sign',
-    'switch-and-pay-one',
-    'grace-period',
-    'register-and-sign',
-    'switch-and-pay-two',
-    'success',
-  ],
-  p2pRelay: [
-    'wait-for-connection',
-    'acknowledge-and-sign',
-    'acknowledgement-payment',
-    'grace-period',
-    'register-and-sign',
-    'registration-payment',
-    'success',
-  ],
-};
 
 // Helper to get next step
 export function getNextStep(

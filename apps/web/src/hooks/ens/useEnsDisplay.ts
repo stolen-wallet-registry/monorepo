@@ -6,6 +6,7 @@ import { useEnsName, useEnsAvatar } from 'wagmi';
 import { normalize } from 'viem/ens';
 import type { Address } from '@/lib/types/ethereum';
 import { ensConfig, isEnsEnabled } from '@/lib/ens-config';
+import { isDisplaySafeEnsName } from '@/lib/ens';
 import { ENS_QUERY_OPTIONS } from './constants';
 
 export interface EnsDisplayData {
@@ -59,11 +60,18 @@ export function useEnsDisplay(
     },
   });
 
-  // Normalize name for avatar lookup
+  // A name that is not safe to substitute for an address is dropped entirely rather than
+  // displayed with a caveat: every consumer of this hook renders the name in the address
+  // slot, so returning it at all is what creates the impersonation. Callers fall back to the
+  // hex address, which is the thing the user can actually verify.
+  const displayName = isDisplaySafeEnsName(name) ? name : null;
+
+  // Normalize for the avatar lookup — gated on the same check, so a rejected name does not
+  // get to put an attacker-chosen image next to the address either.
   let normalizedName: string | undefined;
-  if (name) {
+  if (displayName) {
     try {
-      normalizedName = normalize(name);
+      normalizedName = normalize(displayName);
     } catch {
       // Invalid name, skip avatar lookup
       normalizedName = undefined;
@@ -81,7 +89,7 @@ export function useEnsDisplay(
   });
 
   return {
-    name: name ?? null,
+    name: displayName,
     avatar: includeAvatar ? (avatar ?? null) : null,
     isLoading: isNameLoading || (includeAvatar && isAvatarLoading),
     isError: isNameError,

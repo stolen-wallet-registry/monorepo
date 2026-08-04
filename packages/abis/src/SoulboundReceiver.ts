@@ -40,6 +40,19 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MSG_TYPE_SUPPORT',
     inputs: [],
     outputs: [
@@ -73,6 +86,19 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'activateTrustedForwarder',
     inputs: [
       {
@@ -88,6 +114,25 @@ export const SoulboundReceiverABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -130,7 +175,7 @@ export const SoulboundReceiverABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -154,6 +199,45 @@ export const SoulboundReceiverABI = [
         name: '',
         type: 'address',
         internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pause',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'paused',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -189,6 +273,19 @@ export const SoulboundReceiverABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -261,6 +358,19 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'sweep',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -290,6 +400,13 @@ export const SoulboundReceiverABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'unpause',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -445,8 +562,40 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'event',
+    name: 'Paused',
+    inputs: [
+      {
+        name: 'account',
+        type: 'address',
+        indexed: false,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'SetupCompleted',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'Swept',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -494,6 +643,29 @@ export const SoulboundReceiverABI = [
     anonymous: false,
   },
   {
+    type: 'event',
+    name: 'Unpaused',
+    inputs: [
+      {
+        name: 'account',
+        type: 'address',
+        indexed: false,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'error',
+    name: 'EnforcedPause',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ExpectedPause',
+    inputs: [],
+  },
+  {
     type: 'error',
     name: 'OwnableInvalidOwner',
     inputs: [
@@ -537,6 +709,11 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'error',
+    name: 'SoulboundReceiver__SweepFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SoulboundReceiver__UntrustedForwarder',
     inputs: [],
   },
@@ -557,7 +734,17 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
     inputs: [],
   },
   {
@@ -567,7 +754,22 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

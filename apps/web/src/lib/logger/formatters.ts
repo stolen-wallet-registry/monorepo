@@ -27,7 +27,7 @@ const MAX_STRING_LENGTH = 5000;
 
 /**
  * Redact an Ethereum address, keeping last 4 characters for debugging.
- * Example: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0 → 0x...bEb0
+ * Example: 0x742D35CC6634c0532925A3b844BC9E7595F0BEb0 → 0x...BEb0
  *
  * Defensively handles invalid inputs to prevent data leakage.
  */

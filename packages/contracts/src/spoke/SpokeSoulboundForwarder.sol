@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { ISpokeSoulboundForwarder } from "../interfaces/ISpokeSoulboundForwarder.sol";
 import { IBridgeAdapter } from "../interfaces/IBridgeAdapter.sol";
 
@@ -11,7 +12,14 @@ import { IBridgeAdapter } from "../interfaces/IBridgeAdapter.sol";
 /// @dev Collects payment and forwards mint requests via Hyperlane.
 ///      All soulbound tokens are minted on the hub chain - this contract
 ///      handles cross-chain communication only.
-contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
+///
+///      Owner powers are timelocked (TimelockOwnable). `hubReceiver` is where every mint request
+///      users pay bridge fees for ultimately lands, and `setHubConfig` repoints it: setting it to
+///      bytes32(0) bricks both mint paths on the HubNotConfigured check, and pointing it at a
+///      garbage domain burns real bridge fees on messages nothing will ever handle. Neither is
+///      recoverable for the users who already paid, so post-setup the change requires
+///      propose → 2 days → activate, matching SpokeRegistry.
+contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -152,9 +160,30 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Update hub configuration
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see the contract
+    ///      NatSpec for why repointing the hub receiver is a trust-boundary change.
     /// @param _hubDomain Hyperlane domain ID of hub chain
     /// @param _hubReceiver SoulboundReceiver address on hub (as bytes32)
-    function setHubConfig(uint32 _hubDomain, bytes32 _hubReceiver) external onlyOwner {
+    function setHubConfig(uint32 _hubDomain, bytes32 _hubReceiver) external onlyOwner onlyDuringSetup {
+        _setHubConfig(_hubDomain, _hubReceiver);
+    }
+
+    /// @notice Propose a hub configuration change (2-day delay before activation)
+    /// @param _hubDomain Hyperlane domain ID of hub chain
+    /// @param _hubReceiver SoulboundReceiver address on hub (as bytes32)
+    function proposeHubConfig(uint32 _hubDomain, bytes32 _hubReceiver) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setHubConfig", _hubDomain, _hubReceiver)));
+    }
+
+    /// @notice Activate a previously proposed hub configuration change
+    /// @param _hubDomain Hyperlane domain ID of hub chain
+    /// @param _hubReceiver SoulboundReceiver address on hub (as bytes32)
+    function activateHubConfig(uint32 _hubDomain, bytes32 _hubReceiver) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setHubConfig", _hubDomain, _hubReceiver)));
+        _setHubConfig(_hubDomain, _hubReceiver);
+    }
+
+    function _setHubConfig(uint32 _hubDomain, bytes32 _hubReceiver) internal {
         hubDomain = _hubDomain;
         hubReceiver = _hubReceiver;
         emit HubConfigUpdated(_hubDomain, _bytes32ToAddress(_hubReceiver));
@@ -177,6 +206,7 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
         if (amount > address(this).balance) revert SpokeSoulboundForwarder__InsufficientBalance();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert SpokeSoulboundForwarder__WithdrawalFailed();
+        emit DonationsWithdrawn(to, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -187,4 +217,14 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
     function _bytes32ToAddress(bytes32 b) internal pure returns (address) {
         return address(uint160(uint256(b)));
     }
+
+    /// @notice Accept plain ETH transfers
+    /// @dev Required because this contract is the refund recipient for the bridge adapter's
+    ///      interchain gas payment: HyperlaneAdapter passes `msg.sender` as the refund address
+    ///      in the hook metadata, and Hyperlane's IGP `require`s that refund transfer to
+    ///      succeed. On the normal path we pay exactly `quoteDispatch` so the refund is zero,
+    ///      but any hook that over-estimates its own postDispatch cost would otherwise turn
+    ///      every cross-chain soulbound mint into a revert. SpokeRegistry already has one.
+    ///      Anything received here is withdrawable via {withdrawDonations}.
+    receive() external payable { }
 }

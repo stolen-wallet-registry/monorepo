@@ -79,7 +79,7 @@ export function WhySWRSection() {
           {LISTENER_USE_CASES.map((useCase) => (
             <Card
               key={useCase.title}
-              className="border-border/50 transition-all duration-300 hover:border-primary/30 hover:shadow-md"
+              className="border-border/50 transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-md"
             >
               <CardHeader className="pb-2">
                 <div className="mb-3 flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">

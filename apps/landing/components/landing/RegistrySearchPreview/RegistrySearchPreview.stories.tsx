@@ -15,6 +15,8 @@ function getStatusLabel(status: ResultStatus): string {
       return 'Pending';
     case 'not-found':
       return 'Not Found';
+    case 'unverified':
+      return 'Could Not Verify';
   }
 }
 
@@ -26,6 +28,8 @@ function getStatusDescription(status: ResultStatus): string {
       return 'This wallet has a pending registration.';
     case 'not-found':
       return 'This wallet is not in the registry.';
+    case 'unverified':
+      return 'The registry could not be checked, so this is not a clean result.';
   }
 }
 

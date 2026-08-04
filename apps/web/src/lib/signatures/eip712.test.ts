@@ -11,13 +11,15 @@ import {
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from './eip712';
-import type { Address } from '@/lib/types/ethereum';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 describe('EIP-712 typed data', () => {
   const testChainId = 1;
   const testContract = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address;
   const testWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
-  const testForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
+  const testForwarder = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0' as Address;
+  const testWindowBlockHash =
+    '0x1111111111111111111111111111111111111111111111111111111111111111' as Hash;
 
   describe('constants', () => {
     it('has correct domain name matching contract', () => {
@@ -45,6 +47,8 @@ describe('EIP-712 typed data', () => {
         { name: 'deadline', type: 'uint256' },
       ]);
 
+      // windowBlockHash is LAST and registration-only: it must match the Solidity typehash
+      // byte for byte, and the acknowledgement has no freshness commitment to make.
       expect(EIP712_TYPES.Registration).toEqual([
         { name: 'statement', type: 'string' },
         { name: 'wallet', type: 'address' },
@@ -53,6 +57,7 @@ describe('EIP-712 typed data', () => {
         { name: 'incidentTimestamp', type: 'uint64' },
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
+        { name: 'windowBlockHash', type: 'bytes32' },
       ]);
     });
 
@@ -168,6 +173,7 @@ describe('EIP-712 typed data', () => {
       incidentTimestamp: 0n,
       nonce: 1n,
       deadline: 12345700n,
+      windowBlockHash: testWindowBlockHash,
     };
 
     it('returns correct primaryType', () => {
@@ -198,6 +204,7 @@ describe('EIP-712 typed data', () => {
       expect(typedData.message.trustedForwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(1n);
       expect(typedData.message.deadline).toBe(12345700n);
+      expect(typedData.message.windowBlockHash).toBe(testWindowBlockHash);
     });
   });
 
@@ -219,6 +226,7 @@ describe('EIP-712 typed data', () => {
         incidentTimestamp: 0n,
         nonce: 0n,
         deadline: 100n,
+        windowBlockHash: testWindowBlockHash,
       };
 
       const ackData = buildAcknowledgementTypedData(testChainId, testContract, true, ackMessage);

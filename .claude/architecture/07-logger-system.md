@@ -90,5 +90,5 @@ resetLoggerConfig();
 
 - **Safe stringify**: Handles circular refs, BigInt, Error objects
 - **Sensitive data redaction**: privateKey, password, mnemonic, etc.
-- **Address redaction**: `0x742d...bEb0` format in staging/production
+- **Address redaction**: `0x742D...BEb0` format in staging/production
 - **Clean output**: No stack traces (for LLM copy-paste)

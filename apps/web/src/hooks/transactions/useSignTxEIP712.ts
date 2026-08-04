@@ -10,11 +10,12 @@
  */
 
 import { useCallback } from 'react';
-import { useSignTypedData, useAccount, useChainId } from 'wagmi';
+import { useSignTypedData, useAccount, useChainId, usePublicClient } from 'wagmi';
 import {
   buildTxAcknowledgementTypedData,
   buildTxRegistrationTypedData,
 } from '@/lib/signatures/transactions';
+import { resolveWindowBlock } from '@/lib/signatures';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -51,11 +52,27 @@ export interface TxSignRegParams {
   nonce: bigint;
   /** Signature deadline (timestamp) */
   deadline: bigint;
+  /**
+   * The acknowledgement's grace-period start block, when known. Used to reject a window block
+   * that precedes it before the user is asked to sign.
+   */
+  gracePeriodStart?: bigint;
+}
+
+/**
+ * A transaction-batch registration signature plus the freshness commitment it was produced
+ * over. `windowBlock` must be submitted verbatim — the contract recomputes
+ * `blockhash(windowBlock)` and compares it to the signed hash.
+ */
+export interface SignedTxRegistration {
+  signature: Hex;
+  windowBlock: bigint;
+  windowBlockHash: Hash;
 }
 
 export interface UseSignTxEIP712Result {
   signTxAcknowledgement: (params: TxSignAckParams) => Promise<Hex>;
-  signTxRegistration: (params: TxSignRegParams) => Promise<Hex>;
+  signTxRegistration: (params: TxSignRegParams) => Promise<SignedTxRegistration>;
   isPending: boolean;
   isError: boolean;
   error: Error | null;
@@ -70,6 +87,8 @@ export interface UseSignTxEIP712Result {
 export function useSignTxEIP712(): UseSignTxEIP712Result {
   const { address } = useAccount();
   const chainId = useChainId();
+  // Reads the head block for the registration signature's freshness commitment.
+  const publicClient = usePublicClient({ chainId });
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
@@ -161,10 +180,17 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
 
   /**
    * Sign a transaction batch registration message (Phase 2).
+   *
+   * Resolves the anti-phishing freshness commitment first — see `useSignEIP712.signRegistration`
+   * for why the block number is returned alongside the signature.
    */
   const signTxRegistration = useCallback(
-    async (params: TxSignRegParams): Promise<Hex> => {
+    async (params: TxSignRegParams): Promise<SignedTxRegistration> => {
       const validatedAddress = validateSigningPreconditions(params.reporter);
+      const { windowBlock, windowBlockHash } = await resolveWindowBlock({
+        client: publicClient,
+        gracePeriodStart: params.gracePeriodStart,
+      });
       const message = {
         reporter: params.reporter,
         trustedForwarder: params.trustedForwarder,
@@ -173,6 +199,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         transactionCount: params.transactionCount,
         nonce: params.nonce,
         deadline: params.deadline,
+        windowBlockHash,
       };
       const typedData = buildTxRegistrationTypedData(chainId, validatedAddress, isHub, message);
 
@@ -185,6 +212,8 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         trustedForwarder: params.trustedForwarder,
         nonce: params.nonce.toString(),
         deadline: params.deadline.toString(),
+        windowBlock: windowBlock.toString(),
+        windowBlockHash,
       });
 
       try {
@@ -200,7 +229,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
           dataHash: params.dataHash,
         });
 
-        return signature;
+        return { signature, windowBlock, windowBlockHash };
       } catch (err) {
         logger.signature.error('Transaction batch registration signature failed', {
           chainId,
@@ -210,7 +239,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         throw err;
       }
     },
-    [chainId, isHub, signTypedDataAsync, validateSigningPreconditions]
+    [chainId, isHub, publicClient, signTypedDataAsync, validateSigningPreconditions]
   );
 
   return {

@@ -31,7 +31,12 @@ const contracts = [
 
 mkdirSync(abiDir, { recursive: true });
 
-const exportStatements = [];
+// A missing/renamed artifact must FAIL the export, not silently drop the ABI — a silent
+// skip degrades to a confusing compile error (or worse, a stale committed ABI) downstream.
+// All artifacts are parsed BEFORE anything is written: failing mid-loop would leave fresh
+// ABI files alongside a stale index.ts, the exact partial state the failure exists to prevent.
+const failures = [];
+const parsed = [];
 
 for (const contract of contracts) {
   const artifactPath = join(outDir, contract);
@@ -40,7 +45,8 @@ for (const contract of contracts) {
 
   // Check if artifact file exists
   if (!existsSync(artifactPath)) {
-    console.error(`Artifact not found: ${contract} - skipping`);
+    console.error(`Artifact not found: ${contract}`);
+    failures.push(contract);
     continue;
   }
 
@@ -49,20 +55,37 @@ for (const contract of contracts) {
     const artifact = JSON.parse(artifactContent);
 
     if (!artifact.abi) {
-      console.error(`No ABI found in artifact ${contract} - skipping`);
+      console.error(`No ABI found in artifact ${contract}`);
+      failures.push(contract);
       continue;
     }
 
-    writeFileSync(
-      join(abiDir, `${name}.ts`),
-      `export const ${name}ABI = ${JSON.stringify(artifact.abi, null, 2)} as const;\n`
-    );
-    exportStatements.push(`export { ${name}ABI } from './${name}';`);
-    console.log(`Exported: ${name}`);
+    parsed.push({ name, abi: artifact.abi });
   } catch (err) {
     console.error(`Failed to load artifact ${contract}:`, err.message);
+    failures.push(contract);
     continue;
   }
+}
+
+if (failures.length > 0) {
+  console.error(
+    `\nexport-abi FAILED: ${failures.length} artifact(s) missing or unreadable:\n` +
+      failures.map((f) => `  - ${f}`).join('\n') +
+      `\nDid a contract get renamed? Update the list in scripts/export-abi.js and re-run forge build.` +
+      `\nNo files were written.`
+  );
+  process.exit(1);
+}
+
+const exportStatements = [];
+for (const { name, abi } of parsed) {
+  writeFileSync(
+    join(abiDir, `${name}.ts`),
+    `export const ${name}ABI = ${JSON.stringify(abi, null, 2)} as const;\n`
+  );
+  exportStatements.push(`export { ${name}ABI } from './${name}';`);
+  console.log(`Exported: ${name}`);
 }
 
 // Regenerate index.ts with all exports

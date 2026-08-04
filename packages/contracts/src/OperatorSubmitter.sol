@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "./libraries/TimelockOwnable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -20,7 +21,7 @@ import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 ///      1. Validates operator permissions via OperatorRegistry
 ///      2. Collects fees via FeeManager
 ///      3. Forwards validated data to appropriate registry
-contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
+contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -158,10 +159,18 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Operator batch fees are currently DISABLED (feeManager = address(0) at deployment).
-    ///      Gas costs of batch submissions are already substantial; adding per-batch fees
-    ///      on top is prohibitive. See PRPs/operator-fee-removal.md.
-    ///      Fee infrastructure is retained for potential future use.
+    /// @dev Operator batch fees are free by default: `FeeManager.operatorBatchFeeUsdCents`
+    ///      ships as 0, so this returns 0 unless the DAO explicitly enables a fee. See the
+    ///      rationale on that field, and PRPs/operator-fee-removal.md.
+    ///
+    ///      Note the fee is NOT disabled by leaving `feeManager` unset — the deploy scripts
+    ///      always wire a real FeeManager. The zero default is what makes batches free, and
+    ///      the mechanism here stays live so a future fee needs no redeployment.
+    ///
+    ///      Callers must quote via {quoteBatchFee} and send that amount. Quoting
+    ///      `FeeManager.currentFeeWei()` (the per-REGISTRATION fee charged to individuals) is
+    ///      a different, unrelated price and will under-fund the call whenever a batch fee is
+    ///      enabled, reverting with OperatorSubmitter__InsufficientFee.
     function _getBatchFee() internal view returns (uint256) {
         if (feeManager == address(0)) return 0;
         return IFeeManager(feeManager).operatorBatchFeeWei();
@@ -301,42 +310,197 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set wallet registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup(). Repointing a
+    ///      registry silently redirects every operator batch: submissions appear to succeed,
+    ///      land nowhere the indexer reads, and nobody gets a delay in which to notice.
     /// @param _walletRegistry The new wallet registry address
-    function setWalletRegistry(address _walletRegistry) external onlyOwner {
+    function setWalletRegistry(address _walletRegistry) external onlyOwner onlyDuringSetup {
         if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setWalletRegistry(_walletRegistry);
+    }
+
+    /// @notice Propose a wallet registry change (2-day delay before activation)
+    /// @param _walletRegistry The new wallet registry address
+    function proposeWalletRegistry(address _walletRegistry) external onlyOwner {
+        if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setWalletRegistry", _walletRegistry)));
+    }
+
+    /// @notice Activate a previously proposed wallet registry change
+    /// @param _walletRegistry The new wallet registry address
+    function activateWalletRegistry(address _walletRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setWalletRegistry", _walletRegistry)));
+        _setWalletRegistry(_walletRegistry);
+    }
+
+    /// @notice Set transaction registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setWalletRegistry} for the rationale.
+    /// @param _transactionRegistry The new transaction registry address
+    function setTransactionRegistry(address _transactionRegistry) external onlyOwner onlyDuringSetup {
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setTransactionRegistry(_transactionRegistry);
+    }
+
+    /// @notice Propose a transaction registry change (2-day delay before activation)
+    /// @param _transactionRegistry The new transaction registry address
+    function proposeTransactionRegistry(address _transactionRegistry) external onlyOwner {
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setTransactionRegistry", _transactionRegistry)));
+    }
+
+    /// @notice Activate a previously proposed transaction registry change
+    /// @param _transactionRegistry The new transaction registry address
+    function activateTransactionRegistry(address _transactionRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setTransactionRegistry", _transactionRegistry)));
+        _setTransactionRegistry(_transactionRegistry);
+    }
+
+    /// @notice Set contract registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setWalletRegistry} for the rationale.
+    /// @param _contractRegistry The new contract registry address
+    function setContractRegistry(address _contractRegistry) external onlyOwner onlyDuringSetup {
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setContractRegistry(_contractRegistry);
+    }
+
+    /// @notice Propose a contract registry change (2-day delay before activation)
+    /// @param _contractRegistry The new contract registry address
+    function proposeContractRegistry(address _contractRegistry) external onlyOwner {
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setContractRegistry", _contractRegistry)));
+    }
+
+    /// @notice Activate a previously proposed contract registry change
+    /// @param _contractRegistry The new contract registry address
+    function activateContractRegistry(address _contractRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setContractRegistry", _contractRegistry)));
+        _setContractRegistry(_contractRegistry);
+    }
+
+    function _setWalletRegistry(address _walletRegistry) internal {
         walletRegistry = _walletRegistry;
         emit WalletRegistrySet(_walletRegistry);
     }
 
-    /// @notice Set transaction registry address
-    /// @param _transactionRegistry The new transaction registry address
-    function setTransactionRegistry(address _transactionRegistry) external onlyOwner {
-        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+    function _setTransactionRegistry(address _transactionRegistry) internal {
         transactionRegistry = _transactionRegistry;
         emit TransactionRegistrySet(_transactionRegistry);
     }
 
-    /// @notice Set contract registry address
-    /// @param _contractRegistry The new contract registry address
-    function setContractRegistry(address _contractRegistry) external onlyOwner {
-        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+    function _setContractRegistry(address _contractRegistry) internal {
         contractRegistry = _contractRegistry;
         emit ContractRegistrySet(_contractRegistry);
     }
 
     /// @notice Set operator registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      The operator registry decides who may submit batches, so swapping it is a
+    ///      trust-boundary change — post-setup it goes through propose → 2 days → activate.
     /// @param _operatorRegistry The new operator registry address
-    function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
+    function setOperatorRegistry(address _operatorRegistry) external onlyOwner onlyDuringSetup {
         if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setOperatorRegistry(_operatorRegistry);
+    }
+
+    /// @notice Propose an operator registry change (2-day delay before activation)
+    /// @param _operatorRegistry The new operator registry address
+    function proposeOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorRegistry", _operatorRegistry)));
+    }
+
+    /// @notice Activate a previously proposed operator registry change
+    /// @param _operatorRegistry The new operator registry address
+    function activateOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorRegistry", _operatorRegistry)));
+        _setOperatorRegistry(_operatorRegistry);
+    }
+
+    function _setOperatorRegistry(address _operatorRegistry) internal {
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistrySet(_operatorRegistry);
     }
 
     /// @notice Set fee manager address
-    /// @dev If setting both feeManager and feeRecipient from scratch, use setFeeConfig() instead.
+    /// @dev Immediate during initial setup, timelocked after completeSetup(). The fee pointers
+    ///      are the one set of state on this contract that moves MONEY rather than data:
+    ///      {_collectFee} pushes the collected fee straight to `feeRecipient`, so `feeRecipient`
+    ///      IS the money and `feeManager` sets how much of it there is. Leaving these on a
+    ///      one-transaction owner call let a compromised key divert every future operator fee
+    ///      with no delay and nothing for watchers to react to — while every other pointer here
+    ///      already carried the 2-day path.
+    ///
+    ///      If setting both feeManager and feeRecipient from scratch, use setFeeConfig() instead.
     ///      Order constraint: feeRecipient must be set before feeManager (cannot enable fees without a recipient).
     /// @param _feeManager The new fee manager address (address(0) for free)
-    function setFeeManager(address _feeManager) external onlyOwner {
+    function setFeeManager(address _feeManager) external onlyOwner onlyDuringSetup {
+        _setFeeManager(_feeManager);
+    }
+
+    /// @notice Propose a fee manager change (2-day delay before activation)
+    /// @param _feeManager The new fee manager address (address(0) for free)
+    function proposeFeeManager(address _feeManager) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeManager", _feeManager)));
+    }
+
+    /// @notice Activate a previously proposed fee manager change
+    /// @param _feeManager The new fee manager address
+    function activateFeeManager(address _feeManager) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeManager", _feeManager)));
+        _setFeeManager(_feeManager);
+    }
+
+    /// @notice Set fee recipient address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setFeeManager} for why the fee pointers are trust-boundary state.
+    /// @param _feeRecipient The new fee recipient address
+    function setFeeRecipient(address _feeRecipient) external onlyOwner onlyDuringSetup {
+        _setFeeRecipient(_feeRecipient);
+    }
+
+    /// @notice Propose a fee recipient change (2-day delay before activation)
+    /// @param _feeRecipient The new fee recipient address
+    function proposeFeeRecipient(address _feeRecipient) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeRecipient", _feeRecipient)));
+    }
+
+    /// @notice Activate a previously proposed fee recipient change
+    /// @param _feeRecipient The new fee recipient address
+    function activateFeeRecipient(address _feeRecipient) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeRecipient", _feeRecipient)));
+        _setFeeRecipient(_feeRecipient);
+    }
+
+    /// @notice Set both fee manager and fee recipient atomically
+    /// @dev Avoids ordering issues when configuring fees from scratch.
+    ///      To disable fees, pass address(0) for both.
+    ///      Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setFeeManager}. The atomic pair has its OWN action key, so a proposal to change
+    ///      both cannot be activated as two separate single-pointer changes (or vice versa).
+    /// @param _feeManager The fee manager address (address(0) to disable)
+    /// @param _feeRecipient The fee recipient address
+    function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner onlyDuringSetup {
+        _setFeeConfig(_feeManager, _feeRecipient);
+    }
+
+    /// @notice Propose an atomic fee configuration change (2-day delay before activation)
+    /// @param _feeManager The fee manager address (address(0) to disable)
+    /// @param _feeRecipient The fee recipient address
+    function proposeFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeConfig", _feeManager, _feeRecipient)));
+    }
+
+    /// @notice Activate a previously proposed atomic fee configuration change
+    /// @param _feeManager The fee manager address
+    /// @param _feeRecipient The fee recipient address
+    function activateFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeConfig", _feeManager, _feeRecipient)));
+        _setFeeConfig(_feeManager, _feeRecipient);
+    }
+
+    function _setFeeManager(address _feeManager) internal {
         if (_feeManager != address(0) && feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }
@@ -344,9 +508,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
         emit FeeManagerSet(_feeManager);
     }
 
-    /// @notice Set fee recipient address
-    /// @param _feeRecipient The new fee recipient address
-    function setFeeRecipient(address _feeRecipient) external onlyOwner {
+    function _setFeeRecipient(address _feeRecipient) internal {
         if (feeManager != address(0) && _feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }
@@ -354,12 +516,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
         emit FeeRecipientSet(_feeRecipient);
     }
 
-    /// @notice Set both fee manager and fee recipient atomically
-    /// @dev Avoids ordering issues when configuring fees from scratch.
-    ///      To disable fees, pass address(0) for both.
-    /// @param _feeManager The fee manager address (address(0) to disable)
-    /// @param _feeRecipient The fee recipient address
-    function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+    function _setFeeConfig(address _feeManager, address _feeRecipient) internal {
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }

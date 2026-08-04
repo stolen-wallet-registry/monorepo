@@ -5,7 +5,7 @@
  * Includes transaction selection as the first step.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft, Info } from 'lucide-react';
@@ -37,8 +37,11 @@ import {
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
 import { useUserTransactions } from '@/hooks/transactions';
+import { useOnValueChange } from '@/hooks/useOnValueChange';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
+import { selectStoredTransactionDetails } from '@/lib/transactions/selection';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
@@ -96,7 +99,7 @@ const STEP_TOOLTIPS: Partial<Record<TransactionRegistrationStep, string>> = {
 
 export function TransactionStandardRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { registrationType, step, setStep, reset: resetFlow } = useTransactionRegistrationFlow();
   const {
@@ -149,42 +152,62 @@ export function TransactionStandardRegistrationPage() {
     }
   }, [selectedTxHashes, chainId, setTransactionData]);
 
-  // Set reported chain ID when chain changes
-  useEffect(() => {
-    if (chainId) {
-      setReportedChainId(chainId);
-      setSelectedTxHashes([]);
-      setSelectedTxDetails([]);
-      setTransactionData(null, [], []);
-    }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
+  // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
+  // also fire on mount, wiping the persisted selection every reload while the step index
+  // survives — leaving the flow on a later step with no data and no way back. Two hydration
+  // artifacts must be filtered out: wagmi reports undefined while reconnecting (the
+  // undefined guard), and it can move from the config's default chain to the restored
+  // connector's chain — a defined→defined transition that is not a user switch. The
+  // persisted selection records which chain it was made for (reportedChainId), so a
+  // transition ONTO that chain is a restore, not a switch. This must stay declared ABOVE
+  // the recording effect below: on a real switch both fire in declaration order, and
+  // recording first would make the comparison always match, skipping every wipe.
+  useOnValueChange(chainId, (next, previous) => {
+    if (previous === undefined || next === undefined) return;
+    if (useTransactionFormStore.getState().reportedChainId === next) return;
+    setSelectedTxHashes([]);
+    setSelectedTxDetails([]);
+    setTransactionData(null, [], []);
+  });
 
-  // Set reporter address when connected
+  // Record the reported chain ID once the connection is settled. Recording while wagmi is
+  // still reconnecting would overwrite the persisted value with the config's default chain
+  // and defeat the hydration comparison in the wipe above.
+  useEffect(() => {
+    if (chainId && isConnected) {
+      setReportedChainId(chainId);
+    }
+  }, [chainId, isConnected, setReportedChainId]);
+
+  // Record the reporter whenever a wallet is connected, including on mount.
   useEffect(() => {
     if (address) {
       setReporter(address);
       setForwarder(address); // Standard registration: same address pays
-      setSelectedTxHashes([]);
-      setSelectedTxDetails([]);
-      setTransactionData(null, [], []);
     }
-  }, [
-    address,
-    setReporter,
-    setForwarder,
-    setSelectedTxHashes,
-    setSelectedTxDetails,
-    setTransactionData,
-  ]);
+  }, [address, setReporter, setForwarder]);
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Clear the selection only when the user actually switches wallets. Same reason as the
+  // chain-switch effect above: firing on mount (or on the undefined→address transition
+  // while wagmi reconnects after a reload) discards the persisted selection.
+  useOnValueChange(address, (next, previous) => {
+    if (previous === undefined || next === undefined) return;
+    setSelectedTxHashes([]);
+    setSelectedTxDetails([]);
+    setTransactionData(null, [], []);
+  });
 
-  if (!isConnected) {
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
+
+  // Memoized so the summary table doesn't re-derive (and re-render) on every
+  // unrelated render of this page.
+  const selectedTransactionRows = useMemo(
+    () => selectStoredTransactionDetails(transactions, selectedTxHashes),
+    [transactions, selectedTxHashes]
+  );
+
+  if (!isReady) {
     return null;
   }
 
@@ -197,16 +220,7 @@ export function TransactionStandardRegistrationPage() {
   const handleSelectionChange = (hashes: Hash[]) => {
     setSelectedTxHashes(hashes);
     // Also store full transaction details for display in subsequent steps
-    const selectedDetails = transactions
-      .filter((tx) => hashes.includes(tx.hash))
-      .map((tx) => ({
-        hash: tx.hash,
-        to: tx.to,
-        value: tx.value.toString(),
-        blockNumber: tx.blockNumber.toString(),
-        timestamp: tx.timestamp,
-      }));
-    setSelectedTxDetails(selectedDetails);
+    setSelectedTxDetails(selectStoredTransactionDetails(transactions, hashes));
   };
 
   const handleContinue = () => {
@@ -366,15 +380,7 @@ export function TransactionStandardRegistrationPage() {
 
                 {/* Selected Transactions Table */}
                 <SelectedTransactionsTable
-                  transactions={transactions
-                    .filter((tx) => selectedTxHashes.includes(tx.hash))
-                    .map((tx) => ({
-                      hash: tx.hash,
-                      to: tx.to,
-                      value: tx.value.toString(),
-                      blockNumber: tx.blockNumber.toString(),
-                      timestamp: tx.timestamp,
-                    }))}
+                  transactions={selectedTransactionRows}
                   reportedChainId={chainId}
                 />
 

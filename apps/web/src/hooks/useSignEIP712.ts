@@ -21,10 +21,14 @@
  *   Any tampering between signing and submission will be detected and rejected.
  */
 
-import { useSignTypedData, useAccount, useChainId } from 'wagmi';
-import { buildAcknowledgementTypedData, buildRegistrationTypedData } from '@/lib/signatures';
+import { useSignTypedData, useAccount, useChainId, usePublicClient } from 'wagmi';
+import {
+  buildAcknowledgementTypedData,
+  buildRegistrationTypedData,
+  resolveWindowBlock,
+} from '@/lib/signatures';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface SignParams {
@@ -40,6 +44,23 @@ export interface SignParams {
   nonce: bigint;
   /** Signature deadline (timestamp) */
   deadline: bigint;
+  /**
+   * Registration only: the acknowledgement's grace-period start block, when known. Used to
+   * reject a window block that precedes it before the user is asked to sign.
+   */
+  gracePeriodStart?: bigint;
+}
+
+/**
+ * A registration signature plus the freshness commitment it was produced over.
+ *
+ * `windowBlock` must be persisted alongside the signature and submitted verbatim — the
+ * contract recomputes `blockhash(windowBlock)` and compares it to the signed hash.
+ */
+export interface SignedRegistration {
+  signature: Hex;
+  windowBlock: bigint;
+  windowBlockHash: Hash;
 }
 
 /**
@@ -58,7 +79,7 @@ function toMessage(params: SignParams) {
 
 export interface UseSignEIP712Result {
   signAcknowledgement: (params: SignParams) => Promise<Hex>;
-  signRegistration: (params: SignParams) => Promise<Hex>;
+  signRegistration: (params: SignParams) => Promise<SignedRegistration>;
   isPending: boolean;
   isError: boolean;
   error: Error | null;
@@ -73,6 +94,8 @@ export interface UseSignEIP712Result {
 export function useSignEIP712(): UseSignEIP712Result {
   const { address } = useAccount();
   const chainId = useChainId();
+  // Reads the head block for the registration signature's freshness commitment.
+  const publicClient = usePublicClient({ chainId });
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
@@ -153,11 +176,19 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   /**
    * Sign a registration message (Phase 2).
-   * Uses typed data with reportedChainId and incidentTimestamp.
+   *
+   * Resolves the anti-phishing freshness commitment first: the signature covers the hash of a
+   * block that did not exist when the acknowledgement was signed, so it cannot be harvested in
+   * the same sitting. The block number is returned alongside the signature because the caller
+   * must submit it — the contract recomputes the hash from it.
    */
-  const signRegistration = async (params: SignParams): Promise<Hex> => {
+  const signRegistration = async (params: SignParams): Promise<SignedRegistration> => {
     const validatedAddress = validateSigningPreconditions(params.wallet);
-    const message = toMessage(params);
+    const { windowBlock, windowBlockHash } = await resolveWindowBlock({
+      client: publicClient,
+      gracePeriodStart: params.gracePeriodStart,
+    });
+    const message = { ...toMessage(params), windowBlockHash };
     const typedData = buildRegistrationTypedData(chainId, validatedAddress, isHub, message);
 
     logger.signature.info('Requesting registration signature', {
@@ -170,6 +201,8 @@ export function useSignEIP712(): UseSignEIP712Result {
       incidentTimestamp: params.incidentTimestamp.toString(),
       nonce: params.nonce.toString(),
       deadline: params.deadline.toString(),
+      windowBlock: windowBlock.toString(),
+      windowBlockHash,
     });
 
     try {
@@ -185,7 +218,7 @@ export function useSignEIP712(): UseSignEIP712Result {
         wallet: params.wallet,
       });
 
-      return signature;
+      return { signature, windowBlock, windowBlockHash };
     } catch (error) {
       logger.signature.error('Registration signature failed', {
         chainId,

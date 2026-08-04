@@ -25,6 +25,19 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'ALL_REGISTRIES',
     inputs: [],
     outputs: [
@@ -84,6 +97,24 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'function',
+    name: 'activateCapabilities',
+    inputs: [
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'capabilities',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'activateOperator',
     inputs: [
       {
@@ -104,6 +135,38 @@ export const OperatorRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -284,6 +347,25 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'pendingActivations',
     inputs: [
       {
@@ -316,6 +398,24 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'function',
+    name: 'proposeCapabilities',
+    inputs: [
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'capabilities',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'proposeOperator',
     inputs: [
       {
@@ -332,6 +432,19 @@ export const OperatorRegistryABI = [
         name: 'identifier',
         type: 'string',
         internalType: 'string',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     outputs: [],
@@ -582,17 +695,6 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'error',
-    name: 'OperatorRegistry__NotAuthorizedForRegistry',
-    inputs: [
-      {
-        name: 'requiredCapability',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-  },
-  {
-    type: 'error',
     name: 'OperatorRegistry__ZeroAddress',
     inputs: [],
   },
@@ -625,7 +727,17 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
     inputs: [],
   },
   {
@@ -635,7 +747,22 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

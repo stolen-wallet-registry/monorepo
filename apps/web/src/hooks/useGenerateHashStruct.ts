@@ -1,12 +1,19 @@
 /**
- * Hook to read deadline and hash struct from the registry contract.
+ * Hook to read the signing deadline from the registry contract.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
- * The hash struct returned can be used for verification but is typically not needed client-side.
+ *
+ * The contract deliberately returns ONLY a deadline — no hash struct. The registration typehash
+ * commits to `windowBlockHash`, which is not knowable at this point in the flow (the window block
+ * is resolved later, at signing time), so any digest the contract could build here would be
+ * missing a member its own typehash declares. Typed data is built client-side by
+ * `packages/signatures`; this call exists for the deadline alone. The contract function was
+ * renamed `generateHashStruct` -> `getSignatureDeadline` to match (audit finding A3); this hook
+ * keeps its old name only to contain the blast radius of the rename across call sites.
  *
  * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
- * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+ * Contract signature: getSignatureDeadline(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
  */
 
 import { useMemo } from 'react';
@@ -14,12 +21,11 @@ import { useReadContract, useChainId, type UseReadContractReturnType } from 'wag
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { SignatureStep } from '@/lib/signatures';
-import type { Address, Hash } from '@/lib/types/ethereum';
+import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface HashStructData {
   deadline: bigint;
-  hashStruct: Hash;
 }
 
 export interface UseGenerateHashStructResult {
@@ -70,7 +76,7 @@ export function useGenerateHashStruct(
     address: contractAddress,
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
-    functionName: 'generateHashStruct',
+    functionName: 'getSignatureDeadline',
     // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
     args: forwarderAddress
       ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
@@ -85,7 +91,7 @@ export function useGenerateHashStruct(
 
   // Log contract read result for debugging
   if (result.isError) {
-    logger.contract.error('generateHashStruct call failed', {
+    logger.contract.error('getSignatureDeadline call failed', {
       chainId,
       contractAddress,
       registryType,
@@ -94,21 +100,16 @@ export function useGenerateHashStruct(
       error: result.error?.message,
     });
   } else if (result.data) {
-    logger.contract.debug('generateHashStruct call succeeded', {
+    logger.contract.debug('getSignatureDeadline call succeeded', {
       chainId,
       contractAddress,
-      deadline: result.data[0]?.toString(),
+      deadline: result.data?.toString(),
     });
   }
 
-  // Transform the raw array result into a typed object
-  // The ABI returns bytes32 which wagmi infers as string, but we know it's a hex hash
-  const transformedData: HashStructData | undefined = result.data
-    ? {
-        deadline: result.data[0],
-        hashStruct: result.data[1] as Hash,
-      }
-    : undefined;
+  // The contract returns a bare uint256 deadline; wrap it so call sites keep a named field.
+  const transformedData: HashStructData | undefined =
+    result.data !== undefined ? { deadline: result.data } : undefined;
 
   return {
     data: transformedData,

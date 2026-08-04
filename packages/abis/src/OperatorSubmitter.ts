@@ -42,7 +42,181 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateContractRegistry',
+    inputs: [
+      {
+        name: '_contractRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateFeeConfig',
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_feeRecipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateFeeManager',
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateFeeRecipient',
+    inputs: [
+      {
+        name: '_feeRecipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOperatorRegistry',
+    inputs: [
+      {
+        name: '_operatorRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateTransactionRegistry',
+    inputs: [
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateWalletRegistry',
+    inputs: [
+      {
+        name: '_walletRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
     inputs: [],
     outputs: [],
     stateMutability: 'nonpayable',
@@ -138,6 +312,25 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'pause',
     inputs: [],
     outputs: [],
@@ -158,6 +351,25 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -168,6 +380,115 @@ export const OperatorSubmitterABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeContractRegistry',
+    inputs: [
+      {
+        name: '_contractRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeFeeConfig',
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_feeRecipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeFeeManager',
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeFeeRecipient',
+    inputs: [
+      {
+        name: '_feeRecipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOperatorRegistry',
+    inputs: [
+      {
+        name: '_operatorRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeTransactionRegistry',
+    inputs: [
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeWalletRegistry',
+    inputs: [
+      {
+        name: '_walletRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -351,6 +672,19 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'transactionRegistry',
     inputs: [],
     outputs: [
@@ -394,6 +728,51 @@ export const OperatorSubmitterABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -531,6 +910,12 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'TransactionRegistrySet',
     inputs: [
       {
@@ -643,6 +1028,51 @@ export const OperatorSubmitterABI = [
   {
     type: 'error',
     name: 'ReentrancyGuardReentrantCall',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

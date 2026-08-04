@@ -6,7 +6,7 @@
  * in different languages before minting.
  */
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -59,6 +59,8 @@ export function SoulboundPreviewModal({
   className,
   trigger,
 }: SoulboundPreviewModalProps) {
+  // Ties the visible caption to the Radix select trigger for screen readers.
+  const languageSelectId = useId();
   const [language, setLanguage] = useState(initialLanguage);
 
   const handleLanguageChange = (newLanguage: string) => {
@@ -91,8 +93,11 @@ export function SoulboundPreviewModal({
         <div className="space-y-6">
           {/* Language selector - centered */}
           <div className="flex flex-col items-center space-y-2">
-            <label className="text-sm font-medium">Select Language</label>
+            <label htmlFor={languageSelectId} className="text-sm font-medium">
+              Select Language
+            </label>
             <LanguageSelector
+              id={languageSelectId}
               value={language}
               onChange={handleLanguageChange}
               className="w-full max-w-xs"

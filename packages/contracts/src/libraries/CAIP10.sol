@@ -11,8 +11,8 @@ import { CAIP10Evm } from "./CAIP10Evm.sol";
 ///
 ///      CAIP-10 format: {namespace}:{chainRef}:{identifier}
 ///      Examples:
-///        - EVM:          "eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-///        - EVM Wildcard: "eip155:_:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" (CAIP-363)
+///        - EVM:          "eip155:8453:0x742D35CC6634c0532925A3b844BC9E7595F0BEb0"
+///        - EVM Wildcard: "eip155:_:0x742D35CC6634c0532925A3b844BC9E7595F0BEb0" (CAIP-363)
 ///        - Solana:       "solana:mainnet:7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV"
 ///        - Bitcoin:      "bip122:000000000019d6689c085ae165831e93:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
 ///        - Cosmos:       "cosmos:cosmoshub-4:cosmos1..."

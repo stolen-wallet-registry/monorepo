@@ -1,8 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Tell Tailwind to scan UI package components for class usage */
+/* Tell Tailwind to scan UI package components for class usage.
+   Both .tsx and .ts must be scanned: cva variant definitions live in plain .ts
+   files (button-variants.ts, badge-variants.ts), and a .tsx-only glob silently
+   drops any utility class used nowhere else (e.g. text-primary-foreground). */
 @source "../components/**/*.tsx";
+@source "../components/**/*.ts";
 @source "../lib/**/*.ts";
 
 @custom-variant dark (&:is(.dark *));

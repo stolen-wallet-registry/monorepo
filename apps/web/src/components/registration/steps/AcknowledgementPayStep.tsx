@@ -10,6 +10,7 @@ import { useAccount, useChainId } from 'wagmi';
 import { Alert, AlertDescription } from '@swr/ui';
 import {
   TransactionCard,
+  deriveTransactionStatus,
   type TransactionStatus,
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
@@ -18,10 +19,15 @@ import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useTransactionCost } from '@/hooks/useTransactionCost';
-import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 import type { WalletAcknowledgeArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -66,17 +72,26 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Get stored signature
-  const storedSignature = registeree
-    ? getSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)
-    : null;
-
-  // Parse signature once for reuse (avoid calling parseSignature 4 times)
-  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+  // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
+  // has to mean "sign again", not "submit the same bytes again".
+  const { goToPreviousStep, resetFlow } = useStepNavigation();
+  const needsResign = isError && isSignatureInvalidatingError(error);
 
   // Determine forwarder: for standard registration, it's the same as registeree
   // For self-relay, it's the relayer wallet
   const forwarder = isSelfRelay && relayer ? relayer : registeree;
+
+  // Get stored signature, bound to the forwarder it was signed over. If the user went back
+  // and edited the gas wallet after signing, the cached signature no longer matches the
+  // struct the contract will verify, so it is treated as absent and the user is sent back to
+  // sign rather than being shown an opaque on-chain revert.
+  const storedSignature =
+    registeree && forwarder
+      ? getSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT, forwarder)
+      : null;
+
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
   // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
@@ -108,14 +123,18 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     ownerAddress: registeree,
   });
 
+  useInvalidateRegistryOnConfirm('acknowledgement', hash, isConfirmed);
+
   // Map hook state to TransactionStatus
-  const getStatus = (): TransactionStatus => {
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
-  };
+  const getStatus = (): TransactionStatus =>
+    deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
 
   // Handle confirmed transaction
   useEffect(() => {
@@ -223,8 +242,26 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
 
   /**
    * Handle retry after failure.
+   *
+   * Plain retry for anything a resubmit can fix. For a signature-invalidating revert
+   * (expired deadline, consumed nonce, expired forwarder) the cached signature is discarded
+   * and the user is sent back to sign — retrying it would resubmit identical bytes forever.
    */
   const handleRetry = () => {
+    if (needsResign) {
+      logger.acknowledgement.warn(
+        'Acknowledgement signature invalidated by revert, returning to sign',
+        { registeree, error: error?.message }
+      );
+      if (registeree) {
+        removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      }
+      reset();
+      setLocalError(null);
+      goToPreviousStep();
+      return;
+    }
+
     reset();
     setLocalError(null);
   };
@@ -242,24 +279,18 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Missing form data
   if (!registeree || !expectedWallet) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignature) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={goToPreviousStep}>
+        Signature not found. Go back and sign the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -297,6 +328,8 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
           expectedChainId={chainId}
         />
       )}
+
+      {needsResign && <SignatureInvalidatedAlert />}
 
       {/* Transaction card with integrated cost estimate */}
       <TransactionCard

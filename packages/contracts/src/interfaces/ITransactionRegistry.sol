@@ -33,7 +33,8 @@ interface ITransactionRegistry {
     /// @param nonce Nonce used for this acknowledgement
     /// @param gracePeriodStart Block number when grace period begins
     /// @param dataHash Hash of (txHashes, chainIds) committed in acknowledgement
-    /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for register-phase validation)
+    /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for
+    ///        register-phase validation)
     /// @param trustedForwarder Address authorized to submit registration
     /// @param transactionCount Number of transactions in the batch (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration
@@ -66,14 +67,14 @@ interface ITransactionRegistry {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error TransactionRegistry__AlreadyRegistered();
     error TransactionRegistry__AlreadyAcknowledged();
-    error TransactionRegistry__NotAcknowledged();
     error TransactionRegistry__DeadlineExpired();
+    /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
+    /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
+    error TransactionRegistry__DeadlineTooFarInFuture();
     error TransactionRegistry__DeadlineInPast();
     error TransactionRegistry__GracePeriodNotStarted();
     error TransactionRegistry__InvalidSignature();
-    error TransactionRegistry__InvalidSigner();
     error TransactionRegistry__InvalidForwarder();
     error TransactionRegistry__InsufficientFee();
     error TransactionRegistry__ZeroAddress();
@@ -81,8 +82,23 @@ interface ITransactionRegistry {
     error TransactionRegistry__OnlyOperatorSubmitter();
     error TransactionRegistry__EmptyBatch();
     error TransactionRegistry__BatchTooLarge();
+    /// @notice Thrown when two arrays the CALLER supplied disagree in length
+    /// @dev Caller bug, not a tampering signal. Distinct from
+    ///      {TransactionRegistry__BatchCountMismatch}, which compares a submitted array against
+    ///      the count that was signed.
     error TransactionRegistry__ArrayLengthMismatch();
+    /// @notice Thrown when a supplied `dataHash` is zero
+    /// @dev Caller bug (phase 1). Distinct from {TransactionRegistry__DataHashMismatch}, which
+    ///      means the submitted batch differs from the acknowledged one.
+    error TransactionRegistry__InvalidDataHash();
+    /// @notice Thrown when the submitted batch content differs from what was acknowledged
+    /// @dev TAMPERING signal, not a caller bug.
     error TransactionRegistry__DataHashMismatch();
+    /// @notice Thrown when the number of transactions submitted differs from the
+    ///         `transactionCount` committed to in the acknowledgement signature
+    /// @dev TAMPERING signal, not a caller bug. The arrays themselves are internally consistent;
+    ///      they simply are not the batch the reporter signed for.
+    error TransactionRegistry__BatchCountMismatch();
     error TransactionRegistry__InvalidStep();
     error TransactionRegistry__InvalidTxHashLength();
     error TransactionRegistry__HubTransferFailed();
@@ -203,6 +219,10 @@ interface ITransactionRegistry {
     /// @param deadline Block number deadline for the signature
     /// @param transactionHashes Array of transaction hashes to register
     /// @param chainIds Array of CAIP-2 chain ID hashes for each transaction
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `gracePeriodStart <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE}; proves the signature post-dates the grace period.
     /// @param v EIP-712 signature v component
     /// @param r EIP-712 signature r component
     /// @param s EIP-712 signature s component
@@ -211,6 +231,7 @@ interface ITransactionRegistry {
         uint256 deadline,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -345,14 +366,13 @@ interface ITransactionRegistry {
     /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
-    /// @return hashStruct The EIP-712 hash struct for signing
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
         address trustedForwarder,
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct);
+    ) external view returns (uint256 deadline);
 
     /// @notice Get nonce for a reporter
     /// @param reporter The reporter address

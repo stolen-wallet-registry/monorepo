@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection, Stream } from '@libp2p/interface';
@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
-import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
+import { P2PDebugPanel } from '@/components/dev';
 import {
   WaitForConnectionStep,
   P2PAckPayStep,
@@ -31,104 +31,35 @@ import {
   SuccessStep,
 } from '@/components/registration/steps';
 import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import { processSignature } from '@/components/p2p/processRelayedSignature';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
-import { useP2PStore } from '@/stores/p2pStore';
+import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import {
   setup,
   PROTOCOLS,
   readStreamData,
-  passStreamData,
+  acceptStream,
+  isRelayerProtocolExpectedAtStep,
   isStreamAbortError,
+  passStreamData,
+  RESIGN_ACK,
+  publishResignAck,
   type ProtocolHandler,
-  type ParsedStreamData,
 } from '@/lib/p2p';
-import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
+import { SIGNATURE_STEP } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
-import type { Hex } from '@/lib/types/ethereum';
-
-/**
- * Validate and check if signature data has all required fields.
- */
-function isValidSignatureData(data: ParsedStreamData): data is ParsedStreamData & {
-  signature: NonNullable<ParsedStreamData['signature']>;
-} {
-  if (
-    !data.signature?.value ||
-    !data.signature?.deadline ||
-    !data.signature?.nonce ||
-    !data.signature?.address ||
-    data.signature?.chainId === undefined
-  ) {
-    return false;
-  }
-  // Validate optional BigInt string fields are coercible if present
-  const sig = data.signature;
-  if (sig.reportedChainId != null && typeof sig.reportedChainId !== 'string') return false;
-  if (sig.incidentTimestamp != null && typeof sig.incidentTimestamp !== 'string') return false;
-  return true;
-}
-
-/**
- * Process a received signature: validate, store, confirm receipt, and advance step.
- */
-async function processSignature(
-  data: ParsedStreamData,
-  connection: Connection,
-  step: typeof SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof SIGNATURE_STEP.REGISTRATION,
-  receiptProtocol: string,
-  goToNextStep: () => void
-): Promise<boolean> {
-  if (!isValidSignatureData(data)) {
-    logger.p2p.warn(
-      `Received malformed ${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature data`,
-      { data }
-    );
-    return false;
-  }
-
-  const sig = data.signature;
-  let stored: StoredSignature;
-  try {
-    stored = {
-      signature: sig.value as Hex,
-      deadline: BigInt(sig.deadline),
-      nonce: BigInt(sig.nonce),
-      address: sig.address,
-      chainId: sig.chainId,
-      step,
-      storedAt: Date.now(),
-      reportedChainId: sig.reportedChainId != null ? BigInt(sig.reportedChainId) : undefined,
-      incidentTimestamp: sig.incidentTimestamp != null ? BigInt(sig.incidentTimestamp) : undefined,
-    };
-  } catch (e) {
-    logger.p2p.warn('Failed to parse signature fields as BigInt', { error: e, data });
-    return false;
-  }
-  storeSignature(stored);
-
-  // Confirm receipt
-  await passStreamData({
-    connection,
-    protocols: [receiptProtocol],
-    streamData: { success: true, message: 'Signature received' },
-  });
-
-  logger.p2p.info(
-    `${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`
-  );
-  goToNextStep();
-  return true;
-}
+import { isAddress } from '@/lib/types/ethereum';
 
 /**
  * Step descriptions for P2P relayer flow.
  */
 const STEP_DESCRIPTIONS: Partial<Record<RegistrationStep, string>> = {
-  'wait-for-connection': 'Share your Peer ID with the registeree',
+  'wait-for-connection': "Paste the registeree's pairing code",
   'acknowledge-and-sign': 'Waiting for registeree to sign acknowledgement',
   'acknowledgement-payment': 'Submit the acknowledgement transaction',
   'grace-period': 'Wait for the grace period to complete',
@@ -153,22 +84,42 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 export function P2PRelayerRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { setFormValues } = useFormStore();
   const {
     partnerPeerId,
+    connectedToPeer,
+    pairedWallet,
     setPeerId,
     setPartnerPeerId,
     setConnectedToPeer,
+    clearPairedWallet,
     setInitialized,
     reset: resetP2P,
   } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
+  // Entering (or returning to) the pairing step invalidates any earlier pairing. Without this
+  // a second attempt would find `connectedToPeer` already true and advance immediately, and a
+  // stale `pairedWallet` from an abandoned session would authorize payment for a wallet this
+  // relayer never agreed to. Deps are `[step]` only, so the CONNECT that legitimately sets
+  // these while still on this step is not undone.
+  useEffect(() => {
+    if (step === 'wait-for-connection') {
+      setConnectedToPeer(false);
+      clearPairedWallet();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- must run on step entry only
+  }, [step]);
+
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   // libp2p uses a Proxy that throws when React DevTools tries to serialize it.
   // Always pass getLibp2p getter function instead.
   const libp2pRef = useRef<Libp2p | null>(null);
+  // Read inside long-lived protocol handlers, which would otherwise close over a stale chainId
+  // if the relayer switches network mid-flow.
+  const chainIdRef = useRef(chainId);
   // nodeReady triggers re-render when node initializes so components get the updated ref
   const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -206,8 +157,17 @@ export function P2PRelayerRegistrationPage() {
     goToNextStepRef.current = goToNextStep;
   }, [goToNextStep]);
 
+  useEffect(() => {
+    chainIdRef.current = chainId;
+  }, [chainId]);
+
   // Initialize P2P node - only depends on connection state, not step navigation
   // Uses AbortController to handle React Strict Mode double-invocation cleanly
+  // Every setState below an await in this effect is already gated on
+  // `abortController.signal.aborted` (including inside catch blocks), so a
+  // superseded or unmounted run cannot write state. The rule cannot see the
+  // guard through the async helper calls.
+  // react-doctor-disable-next-line react-doctor/no-set-state-after-await-in-effect
   useEffect(() => {
     const abortController = new AbortController();
     let node: Libp2p | null = null;
@@ -224,37 +184,126 @@ export function P2PRelayerRegistrationPage() {
       try {
         logger.p2p.info('Initializing P2P node for relayer');
 
+        // A fresh flow must never inherit a pin from an abandoned session. `partnerPeerId` is
+        // persisted so a mid-flow reload keeps its partner, but a user who closed the tab from
+        // the success screen would otherwise start their next flow already pinned to the old
+        // partner — and the guard would silently reject the new one. Reading the step from
+        // getState() rather than a dependency keeps this out of the effect's deps, which would
+        // otherwise tear down and rebuild the libp2p node on every step change.
+        if (isPreConnectionStep(useRegistrationStore.getState().step)) {
+          useP2PStore.getState().clearPartnerPeerId();
+        }
+
         // Build protocol handlers for relayer
         // Note: Uses ref for goToNextStep to avoid handler recreation
         // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, connection: Connection) => {
+          handler: async (stream: Stream, connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
+
+              // Bind the stream to the agreed partner peer and to this protocol's schema
+              // before any of it is trusted. Without this an arbitrary peer that learned a
+              // displayed peer ID could inject signatures or drive the step machine.
+              if (!acceptStream(protocol, connection, data, 'relayer')) {
+                // Rejections used to be logged and nothing else, which made the failure mode
+                // indistinguishable from a quiet network: the real registeree's CONNECT is
+                // refused because someone else was pinned first, and both sides just sit
+                // there. Saying so is what lets a relayer notice they are paired with the
+                // wrong peer and restart, rather than eventually paying gas for a stranger.
+                if (protocol === PROTOCOLS.CONNECT) {
+                  setConnectionError(
+                    'A connection attempt was refused because it came from a different peer than the one you are paired with. If your partner cannot connect, restart this page to clear the pairing.'
+                  );
+                }
+                return;
+              }
+
+              // Authenticity is not ordering. `acceptStream` proves the message came from the
+              // bound partner; this proves it belongs at the step the relayer is actually on.
+              // Without it a partner that repeats a CONNECT walks the relayer forward one step
+              // per message — into a payment step with no signature stored, or past the
+              // grace period it is waiting out.
+              const currentStep = useRegistrationStore.getState().step;
+              if (!isRelayerProtocolExpectedAtStep(protocol, currentStep)) {
+                logger.p2p.warn('Ignored protocol message that does not belong at this step', {
+                  protocol,
+                  step: currentStep,
+                });
+                return;
+              }
+
               logger.p2p.info('Relayer received data', { protocol, data });
 
               switch (protocol) {
-                case PROTOCOLS.CONNECT:
-                  // Registeree connected
-                  if (data.form?.registeree) {
-                    setFormValues({ registeree: data.form.registeree });
+                case PROTOCOLS.CONNECT: {
+                  // The registeree's answer to the CONNECT this page sent after pasting their
+                  // pairing code. It proves the pairing was accepted; it is not where the
+                  // relayer learns anything.
+                  //
+                  // SECURITY (audit V4): the wallet being registered comes from the pairing
+                  // code and from nowhere else. `data.form.registeree` is the peer's own claim
+                  // — writing it into the form store is what made the later "does the
+                  // recovered signer match?" check compare a claim against itself. It is now
+                  // only ever compared, and a disagreement aborts the pairing rather than
+                  // being resolved in the peer's favour.
+                  const paired = useP2PStore.getState().pairedWallet;
+                  if (!paired) {
+                    logger.p2p.error('CONNECT accepted with no paired wallet; refusing');
+                    setConnectionError(
+                      'This session has no pairing code, so there is no way to tell which wallet you would be paying for. Restart this page and paste the code your partner shows you.'
+                    );
+                    break;
                   }
-                  if (data.p2p?.partnerPeerId) {
-                    setPartnerPeerId(data.p2p.partnerPeerId);
+                  if (
+                    data.form?.registeree &&
+                    (!isAddress(data.form.registeree) ||
+                      data.form.registeree.toLowerCase() !== paired.toLowerCase())
+                  ) {
+                    logger.p2p.warn('Peer claims a different wallet than the pairing code names', {
+                      claimed: data.form.registeree,
+                      paired,
+                    });
+                    setConnectionError(
+                      'Your partner is reporting a different wallet than the one in the pairing code you pasted. Do not continue — ask them for a fresh code.'
+                    );
+                    break;
                   }
+                  setFormValues({ registeree: paired });
+                  // The partner peer ID was pinned from the pairing code before dialing.
+                  // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
+                  // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
 
-                  // Respond with relayer address
+                  // At `wait-for-connection` this is the answer to our own dial: no reply (it
+                  // would be an answer to an answer, i.e. an endless CONNECT ping-pong) and no
+                  // step advance, because WaitForConnectionStep owns that and gates it on
+                  // `connectedToPeer`.
+                  //
+                  // Past it, the registeree reloaded and is asking us to re-assert the
+                  // handshake so they can sign again (see `lib/p2p/rehandshake.ts`). They
+                  // dialed, so here WE are the answering side. The reply carries our own
+                  // connected address — the same value they already have on file, which is
+                  // what their side checks it against; it is not read from this payload.
+                  if (isPreConnectionStep(currentStep)) break;
+
+                  logger.p2p.info('Answering a re-handshake request from the registeree', {
+                    step: currentStep,
+                  });
                   await passStreamData({
                     connection,
                     protocols: [PROTOCOLS.CONNECT],
-                    streamData: {
-                      form: { relayer: address },
-                      success: true,
-                    },
+                    streamData: { form: { relayer: address }, success: true },
                   });
+                  break;
+                }
 
-                  goToNextStepRef.current();
+                case RESIGN_ACK:
+                  // The registeree's answer to a re-sign request this page sent. Only ever
+                  // settles a promise `handleRetry` is already awaiting; one nobody armed is
+                  // dropped inside `publishResignAck`. `success` is the whole decision —
+                  // `message` is peer text and is logged, never rendered.
+                  publishResignAck(data.success === true);
                   break;
 
                 case PROTOCOLS.ACK_SIG:
@@ -262,9 +311,12 @@ export function P2PRelayerRegistrationPage() {
                   await processSignature(
                     data,
                     connection,
+                    chainIdRef.current,
                     SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.ACK_REC,
-                    goToNextStepRef.current
+                    address,
+                    goToNextStepRef.current,
+                    setConnectionError
                   );
                   break;
 
@@ -273,9 +325,12 @@ export function P2PRelayerRegistrationPage() {
                   await processSignature(
                     data,
                     connection,
+                    chainIdRef.current,
                     SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.REG_REC,
-                    goToNextStepRef.current
+                    address,
+                    goToNextStepRef.current,
+                    setConnectionError
                   );
                   break;
               }
@@ -297,6 +352,7 @@ export function P2PRelayerRegistrationPage() {
           { protocol: PROTOCOLS.CONNECT, streamHandler: streamHandler(PROTOCOLS.CONNECT) },
           { protocol: PROTOCOLS.ACK_SIG, streamHandler: streamHandler(PROTOCOLS.ACK_SIG) },
           { protocol: PROTOCOLS.REG_SIG, streamHandler: streamHandler(PROTOCOLS.REG_SIG) },
+          { protocol: RESIGN_ACK, streamHandler: streamHandler(RESIGN_ACK) },
         ];
 
         const { libp2p: p2pNode } = await setup({ handlers, walletAddress: address });
@@ -362,12 +418,8 @@ export function P2PRelayerRegistrationPage() {
     }
   }, [registrationType, setRegistrationType]);
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   const handleBack = useCallback(() => {
     resetFlow();
@@ -384,7 +436,7 @@ export function P2PRelayerRegistrationPage() {
     setLocation('/');
   }, [resetFlow, resetP2P, setLocation]);
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 
@@ -407,7 +459,14 @@ export function P2PRelayerRegistrationPage() {
     switch (step) {
       case 'wait-for-connection':
         return (
-          <WaitForConnectionStep role="relayer" getLibp2p={getLibp2p} onComplete={goToNextStep} />
+          <WaitForConnectionStep
+            role="relayer"
+            getLibp2p={getLibp2p}
+            onComplete={goToNextStep}
+            // Set by the CONNECT handler above when the registeree answers. A resolved write
+            // is not an accepted pairing — see the prop's documentation.
+            partnerAcknowledged={connectedToPeer}
+          />
         );
 
       case 'acknowledge-and-sign':
@@ -525,6 +584,10 @@ export function P2PRelayerRegistrationPage() {
         getLibp2p={getLibp2p}
         currentPeerId={partnerPeerId}
         partnerRole="registeree"
+        // The wallet this relayer agreed to pay for. A re-pin is only accepted from a fresh
+        // pairing code naming this same wallet — without it, reconnect is a second, unguarded
+        // way to change the binding V4 established (see the dialog's module comment).
+        pairedWallet={pairedWallet}
         onReconnected={(peerId) => {
           setPartnerPeerId(peerId);
           setConnectionError(null);

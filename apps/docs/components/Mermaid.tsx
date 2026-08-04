@@ -11,6 +11,10 @@ export function Mermaid({ chart }: { chart: string }) {
     let cancelled = false;
     setError('');
 
+    // The chain below does have a .catch() (see the end of this statement), and
+    // every setState is gated on `cancelled`. The rule stops following the chain
+    // at the async .then() and reports it as unhandled.
+    // react-doctor-disable-next-line react-doctor/no-promise-then-side-effect-in-effect-without-catch
     import('mermaid')
       .then(async (m) => {
         if (!initialized) {

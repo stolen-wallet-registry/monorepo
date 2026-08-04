@@ -1,0 +1,177 @@
+name: Hyperlane forked integration
+
+# ╔══════════════════════════════════════════════════════════════════════════════════════╗
+# ║  THIS IS THE ONLY CHECK THAT TALKS TO A REAL HYPERLANE MAILBOX.                       ║
+# ║                                                                                      ║
+# ║  Every other Hyperlane test in the suite runs against test/mocks/MockMailbox.sol,     ║
+# ║  which validates only that our code agrees with OUR OWN idea of the interface. That   ║
+# ║  is not a hypothetical weakness: the adapter originally shipped built against the     ║
+# ║  Hyperlane v2 IMailbox (non-payable `dispatch`, no `quoteDispatch`) while every live  ║
+# ║  Base/Optimism mailbox is v3, and nothing in the suite failed — because the mock had  ║
+# ║  the same wrong shape as the adapter. This PR rewrote MockMailbox to the v3 shape,    ║
+# ║  which restores exactly that circularity for anyone reading a green suite.            ║
+# ║                                                                                      ║
+# ║  packages/contracts/test/HyperlaneForked.t.sol is the only thing that breaks the      ║
+# ║  circle, and it `vm.skip`s itself unless OPTIMISM_SEPOLIA_RPC is set. Nothing set it, ║
+# ║  anywhere, so the guard rail was documentation. This workflow sets it.                ║
+# ╚══════════════════════════════════════════════════════════════════════════════════════╝
+#
+# MANUAL ONLY. Two ways to ask for it, both deliberate:
+#   1. Add the `hyperlane-forked` label to a PR
+#   2. Actions -> "Hyperlane forked integration" -> Run workflow
+#
+# There is deliberately NO `schedule` and NO `push` trigger, and the `pull_request` trigger
+# listens for `labeled` only. Actions minutes cost money on a pre-release project.
+#
+# WHAT THIS COSTS YOU BY BEING MANUAL
+#
+# It is a drift detector against an EXTERNAL system. `@hyperlane-xyz/core/` remaps to
+# `src/vendor/hyperlane/` — vendored, in-repo copies of Hyperlane's interfaces. What this test
+# catches is those copies (or the live Mailbox itself) drifting apart, and that happens on
+# Hyperlane's schedule, not on ours. Nothing will now tell you when that drift happens; you find
+# out when you run this.
+#
+# So RUN IT BEFORE ANY TESTNET OR MAINNET DEPLOYMENT, which is what the test file's own header
+# asks for. That is the moment the answer actually matters:
+#
+#   Actions -> "Hyperlane forked integration" -> Run workflow
+#
+# Or locally, which costs nothing at all and needs no secret:
+#   cd packages/contracts && OPTIMISM_SEPOLIA_RPC=<rpc> forge test --match-contract HyperlaneForked -vv
+
+on:
+  # `labeled` only, and it checks for `hyperlane-forked` specifically — NOT the `ci` label, so
+  # a normal CI run does not dial a live RPC. Opening or pushing to a PR starts nothing.
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+concurrency:
+  group: hyperlane-forked-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege, matching ci.yml. Nothing here writes to the repository.
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  forked:
+    name: Forked Hyperlane v3 Mailbox
+    runs-on: ubuntu-latest
+    # Either trigger means a human asked for this specific check. Note the guard is only about
+    # WHICH label — once the job starts it never gates itself into a skip, because a skipped job
+    # renders the same green as a passing one and this job exists to not lie about coverage.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'hyperlane-forked') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: stable
+
+      # No pnpm install: remappings.txt resolves @hyperlane-xyz/core to the in-repo
+      # src/vendor/hyperlane/, and forge-std / openzeppelin-contracts are git submodules. This
+      # job needs no node_modules at all, so there is no postinstall to ignore.
+
+      - name: Run the forked Hyperlane suite
+        working-directory: packages/contracts
+        env:
+          OPTIMISM_SEPOLIA_RPC: ${{ secrets.OPTIMISM_SEPOLIA_RPC }}
+          # `secrets` is NOT an available context in a job-level or step-level `if:`, so the
+          # presence check has to happen inside the shell. That constraint is convenient here:
+          # gating the job into a skip would have been the wrong design anyway, because GitHub
+          # renders a skipped check in the same green as a passing one — which is precisely the
+          # "looks verified, verified nothing" failure this job exists to prevent.
+          #
+          # A missing secret always FAILS here, on either trigger. Both require write access
+          # (dispatching, or labelling a PR), so whoever started this run can also add the
+          # secret — or run it locally, which needs no secret at all.
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/forge-forked.log"
+
+          if [ -z "${OPTIMISM_SEPOLIA_RPC:-}" ]; then
+            {
+              echo '## ⚠ NOT VERIFIED — no live Mailbox was contacted'
+              echo
+              echo 'The `OPTIMISM_SEPOLIA_RPC` secret is not configured, so'
+              echo '`HyperlaneForked.t.sol` skipped itself. **Nothing in this repository has'
+              echo 'checked the vendored Hyperlane interfaces against a real v3 Mailbox.**'
+              echo
+              echo 'The mock-based Hyperlane tests cannot substitute for this: the v2/v3'
+              echo 'mismatch this suite was written for shipped *because* MockMailbox had the'
+              echo 'same wrong shape as the adapter.'
+              echo
+              echo 'Fix: add a repository secret `OPTIMISM_SEPOLIA_RPC` pointing at any'
+              echo 'Optimism Sepolia RPC endpoint (Alchemy, Infura, or a public one).'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            # Deliberately RED, not a warning. This is a true, actionable, non-flaky failure:
+            # you asked for this run, and it verified nothing. It goes green the moment the
+            # secret is added. A green "skipped" would be a lie told to the one person who
+            # actually wanted the answer.
+            echo "::error::OPTIMISM_SEPOLIA_RPC is not configured — the live Hyperlane v3 Mailbox integration was NOT verified. Add the secret, or run it locally: cd packages/contracts && OPTIMISM_SEPOLIA_RPC=<rpc> forge test --match-contract HyperlaneForked -vv"
+            exit 1
+          fi
+
+          status=0
+          forge test --match-contract HyperlaneForked -vv 2>&1 | tee "$LOG" || status=$?
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The forked Hyperlane suite FAILED against the live Optimism Sepolia Mailbox. Treat this as a real signal: either the vendored interfaces in src/vendor/hyperlane/ have drifted from the deployed Mailbox, or the adapter has. Do not deploy until it is understood."
+            {
+              echo '## ❌ Forked Hyperlane suite FAILED'
+              echo
+              echo 'The adapter disagrees with the live Optimism Sepolia Mailbox. See the step log.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # A zero exit code is not sufficient evidence. Two ways this suite can exit 0 having
+          # verified nothing, both of which have to fail loudly:
+          #
+          #   1. `--match-contract` matches no suite (file renamed, contract renamed). forge
+          #      prints "No tests match the provided pattern" and exits 0.
+          #   2. The tests report [SKIP] anyway — e.g. the env var name in `vm.envOr` drifts
+          #      from the secret name here, or `vm.createSelectFork` leaves `forked` false.
+          #      forge counts a skipped suite as ok.
+          if ! grep -qE 'Suite result: ok\.' "$LOG"; then
+            echo "::error::--match-contract HyperlaneForked matched no test suite. The contract was renamed or moved; this job has been verifying nothing. Fix the pattern."
+            {
+              echo '## ❌ NOT VERIFIED — this job is broken'
+              echo
+              echo '`--match-contract HyperlaneForked` matched no test suite, so `forge test`'
+              echo 'exited 0 having run nothing. The contract or file was renamed. Fix the'
+              echo 'pattern in `.github/workflows/hyperlane-forked.yml`.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if grep -q '\[SKIP\]' "$LOG"; then
+            echo "::error::Tests reported SKIPPED even though OPTIMISM_SEPOLIA_RPC was set. The env var name in HyperlaneForked.t.sol's vm.envOr no longer matches the secret name used here, or the fork failed to select."
+            {
+              echo '## ❌ NOT VERIFIED — the suite skipped itself'
+              echo
+              echo 'The secret was set, but the tests still reported `[SKIP]`. Either the env'
+              echo 'var name in `HyperlaneForked.t.sol`s `vm.envOr` has drifted from the secret'
+              echo 'name used here, or `vm.createSelectFork` failed to select the fork.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo '## ✅ Verified against the live Optimism Sepolia Mailbox'
+            echo
+            echo 'The vendored Hyperlane v3 interfaces in `src/vendor/hyperlane/` agree with the'
+            echo 'deployed Mailbox at `0x6966b0E55883d49BFB24539356a2f8A673E02039`: v3 accessors'
+            echo 'resolve, a live quote is non-zero, a real dispatch succeeds, and underpayment'
+            echo "reverts on the adapter's own guard rather than inside a post-dispatch hook."
+          } >> "$GITHUB_STEP_SUMMARY"

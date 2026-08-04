@@ -13,6 +13,14 @@ import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 
+/// @dev Recipient whose `receive` always reverts, used to drive the failed-transfer branch of
+///      `sweep`. Mirrors the helper of the same name in SoulboundReceiver.t.sol.
+contract RejectsEth {
+    receive() external payable {
+        revert("RejectsEth: no");
+    }
+}
+
 /// @title CrossChainInboxTest
 /// @notice Tests for CrossChainInbox: message handling, trust management, constructor validation
 contract CrossChainInboxTest is Test {
@@ -149,7 +157,9 @@ contract CrossChainInboxTest is Test {
         address wallet = makeAddr("crossChainWallet");
         CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
         bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
-        bytes32 expectedMessageId = keccak256(abi.encode(payload));
+        // Route-scoped: origin and sender are part of the preimage, so the same payload
+        // arriving over a different route is a distinct message.
+        bytes32 expectedMessageId = keccak256(abi.encode(SPOKE_CHAIN_ID, spokeRegistryBytes32, payload));
 
         vm.expectEmit(true, true, false, true);
         emit CrossChainInbox.WalletRegistrationReceived(
@@ -213,7 +223,9 @@ contract CrossChainInboxTest is Test {
         bytes32 txHash = keccak256("crossChainTx");
         CrossChainMessage.TransactionBatchPayload memory payload = _makeTxBatchPayload(txHash);
         bytes memory encoded = CrossChainMessage.encodeTransactionBatch(payload);
-        bytes32 expectedMessageId = keccak256(abi.encode(payload));
+        // Route-scoped: origin and sender are part of the preimage, so the same payload
+        // arriving over a different route is a distinct message.
+        bytes32 expectedMessageId = keccak256(abi.encode(SPOKE_CHAIN_ID, spokeRegistryBytes32, payload));
 
         address reporter = makeAddr("reporter");
 
@@ -339,12 +351,91 @@ contract CrossChainInboxTest is Test {
         inboxContract.setTrustedSource(SPOKE_CHAIN_ID, spokeRegistryBytes32, true);
     }
 
+    /// @notice Owner can recover ETH a misbehaving hook forwarded with a message.
+    /// @dev handle() is payable (Hyperlane v3 interface) but our dispatches send 0 value;
+    ///      without sweep(), anything forwarded anyway would be locked forever.
+    function test_Sweep_RecoversHeldEth() public {
+        vm.deal(address(inboxContract), 1 ether);
+        uint256 before = address(this).balance;
+
+        inboxContract.sweep(address(this));
+
+        assertEq(address(inboxContract).balance, 0);
+        assertEq(address(this).balance, before + 1 ether);
+    }
+
+    /// @notice The balance goes to the named recipient, not to the caller.
+    /// @dev The reason sweep takes an explicit `to`: after the DAO handover the owner is a
+    ///      multisig or Governor whose fallback may be non-payable or gas-limited, so paying
+    ///      `msg.sender` unconditionally could strand the funds. Asserting the CALLER's balance
+    ///      is unchanged is what distinguishes this from the old `msg.sender` version — the test
+    ///      above passes `address(this)` as the recipient, so an implementation that ignored `to`
+    ///      entirely would still satisfy it.
+    function test_Sweep_PaysRecipientNotCaller() public {
+        address recipient = makeAddr("sweepRecipient");
+        vm.deal(address(inboxContract), 1 ether);
+        uint256 callerBefore = address(this).balance;
+
+        inboxContract.sweep(recipient);
+
+        assertEq(recipient.balance, 1 ether, "recipient receives the balance");
+        assertEq(address(this).balance, callerBefore, "the calling owner must not be paid");
+    }
+
+    /// @notice Sweeping to the zero address is rejected rather than burning the balance.
+    function test_Sweep_RejectsZeroRecipient() public {
+        vm.deal(address(inboxContract), 1 ether);
+
+        vm.expectRevert(CrossChainInbox.CrossChainInbox__ZeroAddress.selector);
+        inboxContract.sweep(address(0));
+
+        assertEq(address(inboxContract).balance, 1 ether, "balance must be untouched");
+    }
+
+    /// @notice Non-owner cannot sweep
+    function test_Sweep_RejectsNonOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        vm.prank(nonOwner);
+        inboxContract.sweep(nonOwner);
+    }
+
+    /// @notice A recipient that rejects ETH makes the whole sweep revert rather than report success.
+    /// @dev The `if (!success) revert` on the low-level call is the only thing standing between a
+    ///      failed transfer and a `Swept` event that says the money moved. Without it the balance
+    ///      stays put, the event lies, and the owner has no on-chain signal to retry with a
+    ///      different recipient — which is the entire reason `sweep` takes an explicit `to`.
+    ///      Also asserts the funds are not stranded: a second sweep to a payable recipient works.
+    function test_Sweep_RevertsWhenRecipientRejectsEth() public {
+        address recipient = address(new RejectsEth());
+        vm.deal(address(inboxContract), 1 ether);
+
+        vm.expectRevert(CrossChainInbox.CrossChainInbox__SweepFailed.selector);
+        inboxContract.sweep(recipient);
+
+        assertEq(address(inboxContract).balance, 1 ether, "a failed sweep must leave the balance intact");
+        assertEq(recipient.balance, 0, "the rejecting recipient received nothing");
+
+        address good = makeAddr("goodRecipient");
+        inboxContract.sweep(good);
+        assertEq(good.balance, 1 ether, "a second sweep to a valid recipient recovers the balance");
+    }
+
+    /// @dev Lets this test contract (the inbox owner) receive swept ETH.
+    receive() external payable { }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IDEMPOTENCY
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Duplicate wallet registration message reverts with DuplicateMessage
-    function test_HandleWalletRegistration_RejectsDuplicate() public {
+    /// @notice A redelivered wallet message is a silent no-op, not a revert.
+    /// @dev Hyperlane retries a failed delivery with the identical body indefinitely, so
+    ///      reverting on a duplicate turns an ordinary retry (or a second bridge delivering the
+    ///      same logical event) into a permanently undeliverable message with the user's bridge
+    ///      fee already spent. The registration is idempotent, so the correct response is to
+    ///      emit and return, which lets the relayer mark the message delivered.
+    function test_HandleWalletRegistration_DuplicateIsNoOp() public {
         address wallet = makeAddr("dupeWallet");
         bytes memory encoded = _buildWalletMessage(wallet);
 
@@ -352,22 +443,76 @@ contract CrossChainInboxTest is Test {
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
         assertTrue(walletRegistry.isWalletRegistered(wallet));
 
-        // Second delivery of identical payload reverts
-        vm.expectRevert(CrossChainInbox.CrossChainInbox__DuplicateMessage.selector);
+        bytes32 messageId = _walletMessageId(SPOKE_CHAIN_ID, spokeRegistryBytes32, wallet);
+
+        // Second delivery of the identical payload must NOT revert, and must announce the skip
+        vm.expectEmit(true, true, false, false, address(inboxContract));
+        emit CrossChainInbox.DuplicateMessageIgnored(SPOKE_CHAIN_ID, messageId);
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+
+        // ...and must not have changed anything
+        assertTrue(walletRegistry.isWalletRegistered(wallet));
     }
 
-    /// @notice Duplicate transaction batch message reverts with DuplicateMessage
-    function test_HandleTransactionBatch_RejectsDuplicate() public {
+    /// @notice A redelivered transaction batch is a silent no-op, not a revert.
+    /// @dev Mirrors the wallet-path sibling above. "No-op" is asserted three ways, because merely
+    ///      not reverting is also what a handler that RE-PROCESSED the batch would do: the skip
+    ///      must be announced via DuplicateMessageIgnored, and no second batch may be minted in
+    ///      the hub's TransactionRegistry. Without the batch-count assertion a handler that
+    ///      re-ran the registration (burning a batch ID and emitting a phantom batch the indexer
+    ///      would join against) still passes.
+    function test_HandleTransactionBatch_DuplicateIsNoOp() public {
         bytes32 txHash = keccak256("dupeTx");
         bytes memory encoded = _buildTxBatchMessage(txHash);
+        bytes32 messageId = _txBatchMessageId(SPOKE_CHAIN_ID, spokeRegistryBytes32, txHash);
 
         // First delivery succeeds
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+        assertTrue(txRegistry.isTransactionRegistered(txHash, CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID))));
+        uint256 batchesAfterFirst = txRegistry.transactionBatchCount();
+        assertEq(batchesAfterFirst, 1, "First delivery must mint exactly one batch");
 
-        // Second delivery of identical payload reverts
-        vm.expectRevert(CrossChainInbox.CrossChainInbox__DuplicateMessage.selector);
+        // Second delivery of the identical payload must NOT revert, and must announce the skip
+        vm.expectEmit(true, true, false, false, address(inboxContract));
+        emit CrossChainInbox.DuplicateMessageIgnored(SPOKE_CHAIN_ID, messageId);
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+
+        // ...and must not have re-run the registration
+        assertEq(txRegistry.transactionBatchCount(), batchesAfterFirst, "Duplicate must not mint a second batch");
+        assertTrue(txRegistry.isTransactionRegistered(txHash, CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID))));
+    }
+
+    /// @notice The dedup key is scoped to the delivery route, not just the payload.
+    /// @dev With a payload-only preimage, anyone who could induce ANY trusted source to deliver
+    ///      the same logical payload first would burn the ID and permanently strand the genuine
+    ///      message. Including origin+sender also stops two bridges delivering the same event
+    ///      from colliding. Here the same payload arriving from a DIFFERENT trusted sender must
+    ///      be treated as a distinct message (it is processed, not skipped as a duplicate).
+    function test_MessageId_IsScopedToOriginAndSender() public {
+        address wallet = makeAddr("routeScoped");
+        bytes memory encoded = _buildWalletMessage(wallet);
+
+        bytes32 otherSender = bytes32(uint256(uint160(makeAddr("otherSpoke"))));
+        vm.prank(owner);
+        inboxContract.setTrustedSource(SPOKE_CHAIN_ID, otherSender, true);
+
+        bytes32 idFromSpoke = _walletMessageId(SPOKE_CHAIN_ID, spokeRegistryBytes32, wallet);
+        bytes32 idFromOther = _walletMessageId(SPOKE_CHAIN_ID, otherSender, wallet);
+        assertTrue(idFromSpoke != idFromOther, "Same payload from a different sender must hash differently");
+
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+        assertTrue(inboxContract.isMessageProcessed(idFromSpoke));
+        assertFalse(inboxContract.isMessageProcessed(idFromOther), "Other route must not be marked processed");
+
+        // The identical payload arriving over the OTHER route must be PROCESSED, not skipped as a
+        // duplicate. Asserting the flags alone would also hold for a handler that reverted, or one
+        // that emitted DuplicateMessageIgnored — so drive the second delivery and prove it took the
+        // real path: WalletRegistrationReceived fires and its own route key is marked processed.
+        vm.expectEmit(true, true, false, true, address(inboxContract));
+        emit CrossChainInbox.WalletRegistrationReceived(SPOKE_CHAIN_ID, bytes32(uint256(uint160(wallet))), idFromOther);
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, otherSender, encoded);
+
+        assertTrue(inboxContract.isMessageProcessed(idFromOther), "Other route must process, not skip");
     }
 
     /// @notice isMessageProcessed returns false before processing, true after
@@ -375,12 +520,22 @@ contract CrossChainInboxTest is Test {
         address wallet = makeAddr("processedCheck");
         CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
         bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
-        bytes32 messageId = keccak256(abi.encode(payload));
+        bytes32 messageId = keccak256(abi.encode(SPOKE_CHAIN_ID, spokeRegistryBytes32, payload));
 
         assertFalse(inboxContract.isMessageProcessed(messageId), "Message should not be processed yet");
 
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
 
         assertTrue(inboxContract.isMessageProcessed(messageId), "Message should be marked as processed");
+    }
+
+    /// @dev Canonical message ID for a wallet payload delivered over a specific route.
+    function _walletMessageId(uint32 origin, bytes32 sender, address wallet) internal view returns (bytes32) {
+        return keccak256(abi.encode(origin, sender, _makeWalletPayload(wallet)));
+    }
+
+    /// @dev Canonical message ID for a transaction-batch payload delivered over a specific route.
+    function _txBatchMessageId(uint32 origin, bytes32 sender, bytes32 txHash) internal returns (bytes32) {
+        return keccak256(abi.encode(origin, sender, _makeTxBatchPayload(txHash)));
     }
 }

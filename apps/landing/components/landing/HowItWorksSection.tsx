@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PenLine, Clock, CheckCircle2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 
 import { TextAnimate, cn } from '@swr/ui';
 
@@ -84,52 +84,57 @@ function CaipCycler() {
   const current = CAIP_DISPLAY_EXAMPLES[index];
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      {/* Cycling main example */}
-      <div className="relative h-8 w-full overflow-hidden">
+    // Scoped to CaipCycler, the only `m.*` subtree in this section — the surrounding steps are
+    // plain CSS transitions. `domAnimation` provides the enter/exit crossfade; nothing here
+    // uses drag or layout projection, so `domMax` would only inflate the bundle.
+    <LazyMotion features={domAnimation}>
+      <div className="flex flex-col items-center gap-3">
+        {/* Cycling main example */}
+        <div className="relative h-8 w-full overflow-hidden">
+          <AnimatePresence mode="wait">
+            <m.div
+              key={index}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <code className={cn('font-mono text-sm sm:text-base md:text-lg', current.color)}>
+                {truncateDisplay(current.value)}
+              </code>
+            </m.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Label */}
         <AnimatePresence mode="wait">
-          <motion.div
+          <m.span
             key={index}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="text-xs text-muted-foreground"
           >
-            <code className={cn('font-mono text-sm sm:text-base md:text-lg', current.color)}>
-              {truncateDisplay(current.value)}
-            </code>
-          </motion.div>
+            {current.label}
+          </m.span>
         </AnimatePresence>
-      </div>
 
-      {/* Label */}
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={index}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-xs text-muted-foreground"
-        >
-          {current.label}
-        </motion.span>
-      </AnimatePresence>
-
-      {/* Chain indicator dots */}
-      <div className="flex gap-1.5">
-        {CAIP_DISPLAY_EXAMPLES.map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              'size-1.5 rounded-full transition-all duration-300',
-              i === index ? 'bg-primary scale-125' : 'bg-muted-foreground/30'
-            )}
-          />
-        ))}
+        {/* Chain indicator dots */}
+        <div className="flex gap-1.5">
+          {CAIP_DISPLAY_EXAMPLES.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                'size-1.5 rounded-full transition-all duration-300',
+                i === index ? 'bg-primary scale-125' : 'bg-muted-foreground/30'
+              )}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </LazyMotion>
   );
 }
 

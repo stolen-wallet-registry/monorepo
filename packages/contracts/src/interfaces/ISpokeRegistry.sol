@@ -57,6 +57,11 @@ interface ISpokeRegistry {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner withdraws accumulated registration fees
+    /// @param to Recipient of the withdrawal
+    /// @param amount Amount withdrawn in wei
+    event FeesWithdrawn(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when wallet acknowledgement is recorded
@@ -117,6 +122,9 @@ interface ISpokeRegistry {
     error SpokeRegistry__InvalidTimingConfig();
     error SpokeRegistry__InvalidOwner();
     error SpokeRegistry__SignatureExpired();
+    /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
+    /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
+    error SpokeRegistry__DeadlineTooFarInFuture();
     error SpokeRegistry__InvalidNonce();
     error SpokeRegistry__InvalidSigner();
     error SpokeRegistry__InvalidForwarder();
@@ -128,10 +136,39 @@ interface ISpokeRegistry {
     error SpokeRegistry__WithdrawalFailed();
     error SpokeRegistry__InvalidHubConfig();
     error SpokeRegistry__EmptyBatch();
+    /// @notice Thrown when a transaction batch exceeds what the hub can execute on delivery
+    error SpokeRegistry__BatchTooLarge();
+    /// @notice Thrown when two arrays the CALLER supplied disagree in length
+    /// @dev Caller bug, not a tampering signal. Distinct from
+    ///      {SpokeRegistry__BatchCountMismatch}, which compares a submitted array against the
+    ///      count that was signed.
     error SpokeRegistry__ArrayLengthMismatch();
+    /// @notice Thrown when a supplied `dataHash` is zero
+    /// @dev Caller bug (phase 1). Distinct from {SpokeRegistry__DataHashMismatch}, which means
+    ///      the submitted batch differs from the acknowledged one.
     error SpokeRegistry__InvalidDataHash();
+    /// @notice Thrown when the submitted batch content differs from what was acknowledged
+    /// @dev TAMPERING signal, not a caller bug. Mirrors
+    ///      {ITransactionRegistry.TransactionRegistry__DataHashMismatch} on the hub.
+    error SpokeRegistry__DataHashMismatch();
+    /// @notice Thrown when the submitted `reportedChainId` differs from the acknowledged one
+    /// @dev TAMPERING signal, not a caller bug. Split out from `__InvalidDataHash` so a swapped
+    ///      chain and a swapped transaction set are distinguishable.
+    error SpokeRegistry__ChainIdMismatch();
+    /// @notice Thrown when the number of transactions submitted differs from the
+    ///         `transactionCount` committed to in the acknowledgement signature
+    /// @dev TAMPERING signal, not a caller bug.
+    error SpokeRegistry__BatchCountMismatch();
     error SpokeRegistry__DataMismatch();
     error SpokeRegistry__InvalidStep();
+    /// @notice Thrown when acknowledging while a prior acknowledgement is still live
+    /// @dev Mirrors WalletRegistry__AlreadyAcknowledged on the hub. Without it the spoke
+    ///      silently overwrote a live acknowledgement, restarting the grace period and
+    ///      orphaning the signature the user had already produced for the first one.
+    error SpokeRegistry__AlreadyAcknowledged();
+    /// @notice Thrown when a reported incident timestamp is in the future
+    /// @dev Mirrors WalletRegistry__InvalidIncidentTimestamp. `0` ("unknown") stays valid.
+    error SpokeRegistry__InvalidIncidentTimestamp();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -166,11 +203,16 @@ interface ISpokeRegistry {
     /// @dev Must be called by authorized trusted forwarder within registration window.
     ///      Function signature unified with hub WalletRegistry.
     /// @param registeree Wallet address being registered
-    /// @param trustedForwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
+    /// @param trustedForwarder Address authorized to complete registration (must match acknowledge
+    ///        phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
     /// @param nonce Expected nonce for replay protection
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `startBlock <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE}; proves the signature post-dates the grace period.
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
@@ -181,6 +223,7 @@ interface ISpokeRegistry {
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -219,6 +262,10 @@ interface ISpokeRegistry {
     /// @param reporter Address that reported (must be signer)
     /// @param transactionHashes Array of transaction hashes in batch
     /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `startBlock <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE} blocks of now.
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
@@ -229,6 +276,7 @@ interface ISpokeRegistry {
         address reporter,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -261,15 +309,44 @@ interface ISpokeRegistry {
         view
         returns (TransactionAcknowledgementData memory);
 
-    /// @notice Get nonce for wallet
+    /// @notice Get the WALLET-flow nonce for an address
+    /// @dev Distinct from {txNonces}. Sign a wallet acknowledgement or registration against this
+    ///      one; the transaction-batch flow has its own counter so the two cannot displace each
+    ///      other mid-flow. Named `nonces` so the spoke's wallet ABI stays identical to
+    ///      WalletRegistry's on the hub.
     /// @param wallet The wallet address
-    /// @return The current nonce value
+    /// @return The current wallet-flow nonce value
     function nonces(address wallet) external view returns (uint256);
 
-    /// @notice Quote total registration fee
+    /// @notice Get the TRANSACTION-BATCH-flow nonce for an address
+    /// @dev Distinct from {nonces}. Sign `acknowledgeTransactionBatch` / `registerTransactionBatch`
+    ///      against this one. On the hub the equivalent value is `TransactionRegistry.nonces`.
+    /// @param reporter The reporter address
+    /// @return The current transaction-flow nonce value
+    function txNonces(address reporter) external view returns (uint256);
+
+    /// @notice Quote total registration fee for a wallet registration
+    /// @dev Wallet messages carry exactly one entry. Do NOT use this for transaction batches —
+    ///      the bridge fee scales with entry count, so a wallet-shaped quote under-funds any batch
+    ///      of more than one transaction and `registerTransactionBatch` reverts on the fee check.
     /// @param wallet The wallet address being registered
     /// @return The total fee in wei
     function quoteRegistration(address wallet) external view returns (uint256);
+
+    /// @notice Quote total registration fee for the reporter's pending transaction batch
+    /// @dev Reads the acknowledged `transactionCount`, so this is only meaningful between
+    ///      `acknowledgeTransactionBatch` and `registerTransactionBatch`. With no pending
+    ///      acknowledgement the batch is treated as a single entry.
+    /// @param reporter The address whose pending batch is being quoted
+    /// @return The total fee in wei
+    function quoteTransactionBatchRegistration(address reporter) external view returns (uint256);
+
+    /// @notice Detailed fee breakdown for the reporter's pending transaction batch
+    /// @dev Batch-aware counterpart to `quoteFeeBreakdown`, which prices a single-entry wallet
+    ///      message. Use this one for transaction batches or the bridge fee is under-quoted.
+    /// @param reporter The address whose pending batch is being quoted
+    /// @return The fee breakdown struct
+    function quoteTransactionBatchFeeBreakdown(address reporter) external view returns (FeeBreakdown memory);
 
     /// @notice Get detailed fee breakdown
     /// @param wallet The wallet address being registered
@@ -284,11 +361,12 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    /// @return hashStruct Hash to sign
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
-        external
-        view
-        returns (uint256 deadline, bytes32 hashStruct);
+    function getSignatureDeadline(
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        address trustedForwarder,
+        uint8 step
+    ) external view returns (uint256 deadline);
 
     /// @notice Generate hash struct for transaction batch signing (frontend helper)
     /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter.
@@ -299,14 +377,13 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    /// @return hashStruct Hash to sign
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
         address trustedForwarder,
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct);
+    ) external view returns (uint256 deadline);
 
     /// @notice Get deadline info for pending wallet registration
     /// @param session The wallet address (session)

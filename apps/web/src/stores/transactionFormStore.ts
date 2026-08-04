@@ -10,7 +10,10 @@ import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
-import type { Address, Hash } from '@/lib/types/ethereum';
+// Note: selection.ts imports `StoredTransactionDetail` from this module, but only
+// as `import type`, so that edge is erased at compile time — no runtime cycle.
+import { toStoredTransactionDetail } from '@/lib/transactions/selection';
+import { isAddress, isHash, type Address, type Hash } from '@/lib/types/ethereum';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 
 /**
@@ -30,6 +33,17 @@ export interface TransactionFormState {
   reporter: Address | null;
   /** Relayer/forwarder address (pays gas - same as reporter for standard) */
   forwarder: Address | null;
+  /**
+   * Whether `forwarder` arrived from a P2P CONNECT handshake in THIS session.
+   *
+   * Session-only by construction: never persisted, re-asserted false on rehydrate. The
+   * forwarder becomes the `trustedForwarder` inside the signed message, and whoever holds
+   * that role can complete the irreversible registration on their own schedule — a value
+   * restored from localStorage may have been written by anyone with access to this browser
+   * profile, and a reload mid-flow does not re-run CONNECT. The P2P signing path refuses to
+   * sign when this is false. Mirrors `relayerFromPeerSession` on the wallet form store.
+   */
+  forwarderFromPeerSession: boolean;
   /** Selected transaction hashes to register */
   selectedTxHashes: Hash[];
   /** Full transaction details for display in subsequent steps */
@@ -47,6 +61,16 @@ export interface TransactionFormState {
 export interface TransactionFormActions {
   setReporter: (address: Address) => void;
   setForwarder: (address: Address) => void;
+  /** Set the forwarder AND mark it as established by a P2P handshake this session. */
+  setForwarderFromPeer: (address: Address) => void;
+  /**
+   * Drop the handshake mark without touching the address.
+   *
+   * Called when the flow re-enters `wait-for-connection`: a pairing from an earlier attempt
+   * must not make the next CONNECT look pre-accepted, or the reply gate that catches a refused
+   * CONNECT would pass on stale evidence.
+   */
+  clearForwarderProvenance: () => void;
   setSelectedTxHashes: (hashes: Hash[]) => void;
   setSelectedTxDetails: (details: StoredTransactionDetail[]) => void;
   /** Set both hashes and details from UserTransaction array */
@@ -59,9 +83,109 @@ export interface TransactionFormActions {
   reset: () => void;
 }
 
+/** Empty selection — what every rejected rehydrate falls back to. */
+const EMPTY_SELECTION: { hashes: Hash[]; details: StoredTransactionDetail[] } = {
+  hashes: [],
+  details: [],
+};
+
+/**
+ * `isAddress`/`isHash` take a string; persisted values are `unknown` and may be absent.
+ *
+ * `strict: false` disables EIP-55 checksum enforcement, which viem applies by default.
+ *
+ * Note what strict actually does: it short-circuits and ACCEPTS an all-lowercase address, so
+ * lowercase is not the case at risk. What it rejects is a mixed-case address whose casing is
+ * not a valid EIP-55 checksum — which persisted state routinely contains, since an address can
+ * be re-cased by any upstream that touched it before it was stored.
+ *
+ * The question being asked here is "is this a well-formed address", not "is it checksummed".
+ * Enforcing the checksum would discard legitimate state, and for the `to` field it would
+ * discard the entire transaction selection over a display-only value. No security property
+ * here depends on casing — the selection guard compares hashes, not addresses.
+ */
+function isPersistedAddress(value: unknown): value is Address {
+  return typeof value === 'string' && isAddress(value, { strict: false });
+}
+
+function isPersistedHash(value: unknown): value is Hash {
+  return typeof value === 'string' && isHash(value);
+}
+
+/** Whether a persisted entry has the shape and types of a stored transaction detail. */
+function isStoredTransactionDetail(value: unknown): value is StoredTransactionDetail {
+  if (value === null || typeof value !== 'object') return false;
+  const detail = value as Partial<StoredTransactionDetail>;
+  return (
+    isPersistedHash(detail.hash) &&
+    (detail.to === null || isPersistedAddress(detail.to)) &&
+    typeof detail.value === 'string' &&
+    typeof detail.blockNumber === 'string' &&
+    (detail.timestamp === undefined || typeof detail.timestamp === 'number')
+  );
+}
+
+/**
+ * Restore the transaction selection only if the signed set and the displayed set agree.
+ *
+ * The two arrays are compared as SETS, not element-wise: `selectStoredTransactionDetails`
+ * orders details by the user's transaction history rather than by selection order, so a
+ * positional comparison would reject legitimate state.
+ *
+ * Returns an empty selection on any mismatch — a hash that no detail describes would be
+ * signed and submitted invisibly, and a detail with no matching hash is a row shown to the
+ * user that is not actually being reported.
+ */
+function restoreSelection(
+  persistedHashes: unknown,
+  persistedDetails: unknown
+): { hashes: Hash[]; details: StoredTransactionDetail[] } {
+  if (!Array.isArray(persistedHashes) || !Array.isArray(persistedDetails)) {
+    return EMPTY_SELECTION;
+  }
+
+  if (persistedHashes.length === 0 && persistedDetails.length === 0) {
+    return EMPTY_SELECTION;
+  }
+
+  if (!persistedHashes.every(isPersistedHash)) {
+    logger.store.warn('Discarding transaction selection: malformed hash in persisted state');
+    return EMPTY_SELECTION;
+  }
+
+  if (!persistedDetails.every(isStoredTransactionDetail)) {
+    logger.store.warn('Discarding transaction selection: malformed detail in persisted state');
+    return EMPTY_SELECTION;
+  }
+
+  const hashes = persistedHashes as Hash[];
+  const details = persistedDetails as StoredTransactionDetail[];
+
+  // Duplicates would make the set comparison pass while the submitted array differs.
+  const hashSet = new Set(hashes);
+  const detailHashSet = new Set(details.map((detail) => detail.hash));
+
+  const agrees =
+    hashSet.size === hashes.length &&
+    detailHashSet.size === details.length &&
+    hashSet.size === detailHashSet.size &&
+    hashes.every((hash) => detailHashSet.has(hash));
+
+  if (!agrees) {
+    logger.store.warn(
+      'Discarding transaction selection: the hashes to be signed do not match the transactions shown',
+      { hashCount: hashes.length, detailCount: details.length }
+    );
+    return EMPTY_SELECTION;
+  }
+
+  return { hashes, details };
+}
+
 const initialState: TransactionFormState = {
   reporter: null,
   forwarder: null,
+  forwarderFromPeerSession: false,
   selectedTxHashes: [],
   selectedTxDetails: [],
   reportedChainId: null,
@@ -82,10 +206,24 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             state.reporter = address;
           }),
 
+        clearForwarderProvenance: () =>
+          set((state) => {
+            state.forwarderFromPeerSession = false;
+          }),
+
+        setForwarderFromPeer: (address) =>
+          set((state) => {
+            logger.store.debug('Transaction forwarder set from peer handshake', { address });
+            state.forwarder = address;
+            state.forwarderFromPeerSession = true;
+          }),
+
         setForwarder: (address) =>
           set((state) => {
             logger.store.debug('Transaction form forwarder updated', { address });
             state.forwarder = address;
+            // Typed in or derived locally, not handshaked. The P2P path must not accept this.
+            state.forwarderFromPeerSession = false;
           }),
 
         setSelectedTxHashes: (hashes) =>
@@ -111,13 +249,7 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           set((state) => {
             // Convert UserTransaction array to hashes and stored details
             const hashes = transactions.map((tx) => tx.hash);
-            const details: StoredTransactionDetail[] = transactions.map((tx) => ({
-              hash: tx.hash,
-              to: tx.to,
-              value: tx.value.toString(),
-              blockNumber: tx.blockNumber.toString(),
-              timestamp: tx.timestamp,
-            }));
+            const details: StoredTransactionDetail[] = transactions.map(toStoredTransactionDetail);
 
             logger.store.debug('Transaction form transactions updated', {
               count: transactions.length,
@@ -185,8 +317,16 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
       })),
       {
         name: 'swr-transaction-form-state',
-        version: 3, // Bumped for dataHash field rename
-        // Don't persist derived data - it's computed
+        version: 1,
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
+        // Don't persist derived data - it's computed.
+        // `forwarderFromPeerSession` is session-only by design — persisting it would hand the
+        // attacker the very flag it exists to withhold.
         partialize: (state) => ({
           reporter: state.reporter,
           forwarder: state.forwarder,
@@ -194,40 +334,49 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           selectedTxDetails: state.selectedTxDetails,
           reportedChainId: state.reportedChainId,
         }),
-        migrate: (persisted, version) => {
+        // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
+        // mismatch, so validation placed there would never run on a normal rehydrate. `merge`
+        // supplies a default for every field, which covers any stale local state a developer
+        // may have. (The `migrate` above is not validation — it exists only so a version
+        // mismatch discards and REWRITES the entry instead of erroring on every reload.)
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<TransactionFormState>;
 
-          if (version < 3) {
-            return {
-              reporter: state.reporter ?? initialState.reporter,
-              forwarder: state.forwarder ?? initialState.forwarder,
-              selectedTxHashes: Array.isArray(state.selectedTxHashes)
-                ? state.selectedTxHashes
-                : initialState.selectedTxHashes,
-              selectedTxDetails: Array.isArray(state.selectedTxDetails)
-                ? state.selectedTxDetails
-                : initialState.selectedTxDetails,
-              reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-              dataHash: null,
-              txHashesForContract: [],
-              chainIdsForContract: [],
-            };
-          }
+          // `selectedTxHashes` is what gets hashed into the signed `dataHash` and submitted
+          // on-chain; `selectedTxDetails` is the only thing the user ever sees. Restoring them
+          // independently means a rewritten localStorage entry can show the victim their own
+          // transactions while they sign and submit someone else's — and every downstream
+          // check passes, because the signature over the poisoned hash is genuine and the
+          // count check compares the poisoned array against itself.
+          //
+          // So they are restored as a pair or not at all. Any disagreement clears the
+          // selection and sends the user back to pick again, which is recoverable; signing an
+          // attacker's transaction list under your own name is not.
+          const selection = restoreSelection(state.selectedTxHashes, state.selectedTxDetails);
 
           return {
-            reporter: state.reporter ?? initialState.reporter,
-            forwarder: state.forwarder ?? initialState.forwarder,
-            selectedTxHashes: Array.isArray(state.selectedTxHashes)
-              ? state.selectedTxHashes
-              : initialState.selectedTxHashes,
-            selectedTxDetails: Array.isArray(state.selectedTxDetails)
-              ? state.selectedTxDetails
-              : initialState.selectedTxDetails,
-            reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
+            ...current,
+            reporter: isPersistedAddress(state.reporter) ? state.reporter : initialState.reporter,
+            forwarder: isPersistedAddress(state.forwarder)
+              ? state.forwarder
+              : initialState.forwarder,
+            // Explicit, not merely absent from the persisted blob: a rehydrated forwarder has
+            // by definition not been handshaked this session, and this is the assertion that
+            // makes a hand-written localStorage entry unsignable in the P2P flow.
+            forwarderFromPeerSession: false,
+            selectedTxHashes: selection.hashes,
+            selectedTxDetails: selection.details,
+            reportedChainId:
+              typeof state.reportedChainId === 'number' &&
+              Number.isInteger(state.reportedChainId) &&
+              state.reportedChainId > 0
+                ? state.reportedChainId
+                : initialState.reportedChainId,
+            // Derived data is recomputed, never restored.
             dataHash: null,
             txHashesForContract: [],
             chainIdsForContract: [],

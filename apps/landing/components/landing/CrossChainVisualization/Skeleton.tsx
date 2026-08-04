@@ -16,8 +16,9 @@ function SkeletonCircle({ size = 'size-10' }: { size?: string }) {
   return <div className={cn('animate-pulse rounded-full bg-muted/50', size)} />;
 }
 
-// Skeleton loading state for desktop visualization
-export function CrossChainVisualizationSkeletonDesktop({ className }: { className?: string }) {
+// Skeleton loading state for desktop visualization.
+// Module-private: only CrossChainVisualizationSkeleton below composes these.
+function CrossChainVisualizationSkeletonDesktop({ className }: { className?: string }) {
   return (
     <div
       className={cn('flex flex-col items-center gap-6', className)}
@@ -66,7 +67,7 @@ export function CrossChainVisualizationSkeletonDesktop({ className }: { classNam
 }
 
 // Mobile skeleton
-export function CrossChainVisualizationSkeletonMobile({ className }: { className?: string }) {
+function CrossChainVisualizationSkeletonMobile({ className }: { className?: string }) {
   return (
     <div
       className={cn('flex flex-col items-center gap-4 px-4', className)}

@@ -38,6 +38,31 @@ Do not commit `keys.json`.
 
 Set `RELAY_PRIVATE_KEY` to a base64-encoded Ed25519 private key to avoid local files.
 
+### Reservation limits
+
+Circuit relay slots are the scarce resource here. P2P relay is the only registration method
+available to a victim whose wallet has been drained, so exhausting these slots does not degrade
+the product — it removes those users' only option. Defaults live in `src/relay-limits.mjs` and
+are printed at startup.
+
+| Variable                      | Default   | Purpose                                              |
+| ----------------------------- | --------- | ---------------------------------------------------- |
+| `RELAY_MAX_RESERVATIONS`      | `512`     | Global reservation ceiling (libp2p default is 15).   |
+| `RELAY_RESERVATIONS_PER_HOST` | `8`       | Reservations one source host may hold.               |
+| `RELAY_MAX_CONNECTIONS`       | `600`     | Connection ceiling; must exceed the reservation cap. |
+| `RELAY_RESERVATION_TTL_MS`    | `1200000` | Reservation lifetime (20 minutes).                   |
+
+A registration flow needs two reservations (registeree + relayer) for roughly 15 minutes worst
+case — a 1-4 minute randomized grace period plus the registration window. The per-host cap of 8
+leaves room for shared NAT and reconnect churn while making it take at least 64 distinct source
+addresses to fill the global ceiling, rather than the single host that could fill the old 15.
+
+`@libp2p/circuit-relay-v2` has no per-peer or per-IP reservation option; the cap is enforced via
+the `connectionGater.denyInboundRelayReservation` hook, which the relay server consults
+immediately before granting a reservation. Reservation _renewals_ are never denied, and a
+request whose source host cannot be determined is allowed (falling back to the global ceiling)
+so that an unrecognised transport can never take the relay offline for everyone.
+
 ## Running
 
 ```bash

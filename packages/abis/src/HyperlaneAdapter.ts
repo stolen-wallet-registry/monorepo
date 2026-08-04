@@ -12,17 +12,103 @@ export const HyperlaneAdapterABI = [
         type: 'address',
         internalType: 'address',
       },
-      {
-        name: '_gasPaymaster',
-        type: 'address',
-        internalType: 'address',
-      },
     ],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    name: 'DEFAULT_GAS_AMOUNT',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'DEFAULT_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'DEFAULT_PER_ENTRY_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_GAS_LIMIT',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MIN_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MIN_PER_ENTRY_GAS',
     inputs: [],
     outputs: [
       {
@@ -42,6 +128,64 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'activateAuthorizedSender',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateDomainSupport',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'addDomains',
     inputs: [
       {
@@ -55,20 +199,26 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'bridgeName',
-    inputs: [],
+    name: 'authorizedSenders',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [
       {
         name: '',
-        type: 'string',
-        internalType: 'string',
+        type: 'bool',
+        internalType: 'bool',
       },
     ],
-    stateMutability: 'pure',
+    stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'gasAmounts',
+    name: 'baseGasAmounts',
     inputs: [
       {
         name: '',
@@ -87,13 +237,76 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'gasPaymaster',
+    name: 'bridgeName',
     inputs: [],
     outputs: [
       {
         name: '',
-        type: 'address',
-        internalType: 'contract IInterchainGasPaymaster',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'entryCount',
+    inputs: [
+      {
+        name: 'payload',
+        type: 'bytes',
+        internalType: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'count',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'gasLimitFor',
+    inputs: [
+      {
+        name: 'destinationChain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'payload',
+        type: 'bytes',
+        internalType: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -126,6 +339,44 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -139,6 +390,64 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'perEntryGasAmounts',
+    inputs: [
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeAuthorizedSender',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeDomainSupport',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'quoteMessage',
     inputs: [
       {
@@ -147,7 +456,7 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: '',
+        name: 'payload',
         type: 'bytes',
         internalType: 'bytes',
       },
@@ -199,6 +508,24 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'setAuthorizedSender',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setDomainSupport',
     inputs: [
       {
@@ -217,7 +544,7 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'setGasAmount',
+    name: 'setGasAmounts',
     inputs: [
       {
         name: 'domain',
@@ -225,13 +552,31 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: 'gasAmount',
+        name: 'baseGas',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'perEntryGas',
         type: 'uint256',
         internalType: 'uint256',
       },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -286,6 +631,70 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'AuthorizedSenderUpdated',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'DomainSupportUpdated',
     inputs: [
       {
@@ -314,7 +723,13 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: 'gasAmount',
+        name: 'baseGas',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'perEntryGas',
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',
@@ -392,6 +807,12 @@ export const HyperlaneAdapterABI = [
     anonymous: false,
   },
   {
+    type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
+    anonymous: false,
+  },
+  {
     type: 'error',
     name: 'BridgeAdapter__InsufficientFee',
     inputs: [],
@@ -408,12 +829,32 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'error',
+    name: 'HyperlaneAdapter__GasConfigBelowFloor',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__GasConfigExceedsLimit',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__GasLimitExceeded',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'HyperlaneAdapter__RefundFailed',
     inputs: [],
   },
   {
     type: 'error',
     name: 'HyperlaneAdapter__TooManyDomains',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__UnauthorizedSender',
     inputs: [],
   },
   {
@@ -442,5 +883,50 @@ export const HyperlaneAdapterABI = [
         internalType: 'address',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
+    inputs: [],
   },
 ] as const;

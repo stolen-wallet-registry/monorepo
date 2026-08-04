@@ -1,14 +1,16 @@
 /**
- * PeerConnectForm component for connecting to a remote peer by ID.
+ * PeerConnectForm: the single input in the P2P pairing flow.
  *
- * Used by the registeree to connect to a relayer.
+ * Used by the relayer (the gas payer) to paste the pairing code published by the party being
+ * helped. The code carries the wallet the relayer would be paying for as well as the peer to
+ * dial, so this input is validated with `decodePairingToken` rather than a peer-ID check —
+ * and a bare peer ID is refused, with the decoder's own explanation, instead of being accepted
+ * as a pairing with an unknown wallet (audit V4).
  */
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { peerIdFromString } from '@libp2p/peer-id';
-import { isPeerId } from '@libp2p/interface';
 
 import {
   Button,
@@ -20,27 +22,27 @@ import {
   FormMessage,
   Input,
 } from '@swr/ui';
+import { decodePairingToken } from '@/lib/p2p/pairingToken';
 import { logger } from '@/lib/logger';
 
 const formSchema = z.object({
-  peerId: z.string().refine(
-    (value) => {
-      try {
-        const peerId = peerIdFromString(value);
-        return isPeerId(peerId);
-      } catch {
-        return false;
-      }
-    },
-    { message: 'Invalid Peer ID. Please check and try again.' }
-  ),
+  // superRefine rather than refine so the decoder's own message survives: it is the only
+  // place that can say "that is a Peer ID on its own, ask for the full code", which is what
+  // stops a user from concluding the app is broken and hunting for a way around it.
+  peerId: z.string().superRefine((value, ctx) => {
+    const result = decodePairingToken(value);
+    if (!result.ok) {
+      ctx.addIssue({ code: 'custom', message: result.message });
+    }
+  }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 interface PeerConnectFormProps {
-  /** Called when connection is initiated */
-  onConnect: (peerId: string) => Promise<void>;
+  /** Called with the raw pairing code once it parses. The caller decodes it again — this form
+   * validates, it does not own the binding. */
+  onConnect: (pairingCode: string) => Promise<void>;
   /** Whether connection is in progress */
   isConnecting?: boolean;
   /** Error message to display */
@@ -48,7 +50,7 @@ interface PeerConnectFormProps {
 }
 
 /**
- * Form for connecting to a remote peer by their ID.
+ * Form for connecting to a partner using their pairing code.
  */
 export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectFormProps) {
   const form = useForm<FormValues>({
@@ -59,11 +61,11 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
   });
 
   const handleSubmit = async (values: FormValues) => {
-    logger.p2p.info('Initiating peer connection', { targetPeerId: values.peerId });
+    logger.p2p.info('Initiating peer connection from pairing code');
     try {
       await onConnect(values.peerId);
     } catch (err) {
-      logger.p2p.error('Peer connection failed', { targetPeerId: values.peerId }, err as Error);
+      logger.p2p.error('Peer connection failed', {}, err as Error);
       // Error will be shown via the error prop from parent
     }
   };
@@ -76,10 +78,10 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
           name="peerId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Partner Peer ID</FormLabel>
+              <FormLabel>Partner pairing code</FormLabel>
               <FormControl>
                 <Input
-                  placeholder="Enter your relayer's Peer ID"
+                  placeholder="swr1:<peer id>:<wallet address>"
                   {...field}
                   disabled={isConnecting}
                 />
@@ -96,7 +98,7 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
         )}
 
         <Button type="submit" className="w-full" disabled={isConnecting}>
-          {isConnecting ? 'Connecting...' : 'Connect to Peer'}
+          {isConnecting ? 'Connecting...' : 'Connect to Partner'}
         </Button>
       </form>
     </Form>

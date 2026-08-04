@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 
 import { IContractRegistry } from "../interfaces/IContractRegistry.sol";
 import { CAIP10 } from "../libraries/CAIP10.sol";
@@ -20,7 +21,7 @@ import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
 ///      - Contract maliciousness requires technical expertise to verify
 ///      - DAO-approved operators (security firms) provide trusted bulk intel
 ///      - Operator approval process substitutes for two-phase EIP-712 protection
-contract ContractRegistry is IContractRegistry, Ownable2Step {
+contract ContractRegistry is IContractRegistry, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -164,8 +165,29 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IContractRegistry
-    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      `operatorSubmitter` is a trust boundary — it can register arbitrary contract
+    ///      entries in bulk — so post-setup changes go through propose → 2 days → activate.
+    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner onlyDuringSetup {
         if (newOperatorSubmitter == address(0)) revert ContractRegistry__ZeroAddress();
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    /// @notice Propose an operator submitter change (2-day delay before activation)
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function proposeOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        if (newOperatorSubmitter == address(0)) revert ContractRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+    }
+
+    /// @notice Activate a previously proposed operator submitter change
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function activateOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    function _setOperatorSubmitter(address newOperatorSubmitter) internal {
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);

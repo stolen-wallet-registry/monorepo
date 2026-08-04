@@ -25,6 +25,16 @@ export interface UseEthPriceResult {
   refetch: () => void;
 }
 
+/**
+ * Hoisted to module scope: constructing an Intl.NumberFormat is expensive
+ * (locale data lookup) and the options never vary, so building one per fetch
+ * was pure waste.
+ */
+const USD_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
+
 /** CoinGecko free API endpoint */
 const COINGECKO_API =
   'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
@@ -92,10 +102,7 @@ async function fetchEthPrice(): Promise<EthPriceData> {
     const usd = data.ethereum.usd;
     const usdCents = Math.round(usd * 100);
 
-    const usdFormatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(usd);
+    const usdFormatted = USD_FORMATTER.format(usd);
 
     logger.contract.debug('ETH price fetched from CoinGecko', {
       usd,

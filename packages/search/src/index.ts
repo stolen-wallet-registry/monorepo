@@ -21,10 +21,19 @@ export type {
   // Primitives
   Address,
   Hash,
+  Hex,
+  BatchId,
   // Search types
   SearchType,
   SearchConfig,
   SearchResult,
+  // Verification coverage
+  RegistryKind,
+  UnverifiedRegistries,
+  NoUnverifiedRegistries,
+  // Indexer freshness
+  IndexerStatus,
+  IndexerChainStatus,
   // Address (combined wallet + contract)
   AddressSearchData,
   AddressSearchResult,
@@ -47,12 +56,23 @@ export type {
 } from './types';
 
 // Detection utilities
-export { detectSearchType, isAddress, isTransactionHash, isCAIP10, parseCAIP10 } from './detect';
+export {
+  detectSearchType,
+  isAddress,
+  isTransactionHash,
+  isCAIP10,
+  isCAIP10Shaped,
+  parseCAIP10,
+  parseWildcardCAIP10,
+  EVM_WILDCARD_CHAIN_REF,
+  EVM_WILDCARD_CHAIN_REFS,
+} from './detect';
 
 // Core search functions
 export {
   search,
   searchAddress,
+  searchAddressByCAIP10,
   searchWallet,
   searchWalletByCAIP10,
   searchTransaction,
@@ -60,6 +80,15 @@ export {
   getOperator,
   listOperators,
 } from './search';
+
+// Failure handling — a search that cannot reach a registry throws rather than
+// returning something that reads as "clean".
+export { SearchUnavailableError, isSearchUnavailableError, registryKindLabel } from './errors';
+export type { SearchUnavailableReason } from './errors';
+
+// Indexer freshness — a stale indexer answers "not found" for everything it has not
+// reached yet, so consumers acting on a clean result need to know the lag.
+export { getIndexerStatus, isIndexerStale, DEFAULT_MAX_LAG_SECONDS } from './status';
 
 // Interpretation utilities
 export {
@@ -89,6 +118,7 @@ export {
   CONTRACT_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
+  OPERATORS_LIST_ALL_QUERY,
   // Dashboard queries
   REGISTRY_STATS_QUERY,
   RECENT_WALLETS_QUERY,
@@ -99,12 +129,11 @@ export {
   RECENT_CONTRACT_BATCHES_QUERY,
   WALLET_BATCH_ONLY_QUERY,
   WALLET_ENTRIES_BY_TX_HASH_QUERY,
-  WALLET_BATCH_DETAIL_QUERY,
   TRANSACTION_BATCH_ONLY_QUERY,
   TRANSACTION_ENTRIES_BY_TX_HASH_QUERY,
-  TRANSACTION_BATCH_DETAIL_QUERY,
   CONTRACT_BATCH_DETAIL_QUERY,
   // Response types
+  type RawWalletItem,
   type RawOperatorsListResponse,
   // Dashboard response types
   type RawRegistryStatsResponse,
@@ -116,9 +145,7 @@ export {
   type RawRecentContractBatchesResponse,
   type RawWalletBatchOnlyResponse,
   type RawWalletEntriesByTxHashResponse,
-  type RawWalletBatchDetailResponse,
   type RawTransactionBatchOnlyResponse,
   type RawTransactionEntriesByTxHashResponse,
-  type RawTransactionBatchDetailResponse,
   type RawContractBatchDetailResponse,
 } from './queries';

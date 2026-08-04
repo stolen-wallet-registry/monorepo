@@ -27,7 +27,46 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_TWO_PHASE_BATCH_SIZE',
     inputs: [],
     outputs: [
       {
@@ -100,6 +139,84 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'activateHub',
+    inputs: [
+      {
+        name: 'newHub',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOperatorSubmitter',
+    inputs: [
+      {
+        name: 'newOperatorSubmitter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'deadlineBlocks',
     inputs: [],
     outputs: [
@@ -163,50 +280,6 @@ export const TransactionRegistryABI = [
         name: '',
         type: 'address',
         internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'generateTransactionHashStruct',
-    inputs: [
-      {
-        name: 'dataHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'reportedChainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'transactionCount',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'trustedForwarder',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -451,6 +524,45 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getTransactionSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'graceBlocks',
     inputs: [],
     outputs: [
@@ -584,6 +696,44 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -594,6 +744,45 @@ export const TransactionRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeHub',
+    inputs: [
+      {
+        name: 'newHub',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOperatorSubmitter',
+    inputs: [
+      {
+        name: 'newOperatorSubmitter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -678,6 +867,11 @@ export const TransactionRegistryABI = [
         name: 'chainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
+      },
+      {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
         name: 'v',
@@ -815,6 +1009,19 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'transactionBatchCount',
     inputs: [],
     outputs: [
@@ -858,6 +1065,51 @@ export const TransactionRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -989,6 +1241,12 @@ export const TransactionRegistryABI = [
         internalType: 'address',
       },
     ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
     anonymous: false,
   },
   {
@@ -1192,17 +1450,77 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__AlreadyAcknowledged',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistry__AlreadyRegistered',
+    name: 'TransactionRegistry__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistry__ArrayLengthMismatch',
+    name: 'TransactionRegistry__BatchCountMismatch',
     inputs: [],
   },
   {
@@ -1227,6 +1545,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__DeadlineTooFarInFuture',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__EmptyBatch',
     inputs: [],
   },
@@ -1247,6 +1570,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__InvalidDataHash',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__InvalidForwarder',
     inputs: [],
   },
@@ -1257,22 +1585,12 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
-    name: 'TransactionRegistry__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'TransactionRegistry__InvalidStep',
     inputs: [],
   },
   {
     type: 'error',
     name: 'TransactionRegistry__InvalidTxHashLength',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistry__NotAcknowledged',
     inputs: [],
   },
   {

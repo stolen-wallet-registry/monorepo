@@ -63,9 +63,21 @@ export function useContractNonce(
   const isSpoke = registryType === 'spoke';
   const enabled = !!ownerAddress && !!contractAddress;
 
-  // Transaction registry needs faster polling for batch registration workflows
-  const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
-  const staleTime = variant === 'transaction' ? undefined : 30_000;
+  // Both variants poll, at the same 5s interval.
+  //
+  // The wallet variant used to get `staleTime: 30_000` and NO interval, which meant it never
+  // refetched at all while mounted — a query with no interval and no invalidation only reruns
+  // on remount or refocus. `useRelayedSignatureReview` reads the nonce through this hook to
+  // decide whether a relayed signature is still current, so a relayer sitting on a pay step
+  // could pass that check against a value the chain had already moved past, and spend gas on a
+  // signature the contract then rejects. The contract still catches it — this is defence in
+  // depth — but finding out before paying is the entire point of that review.
+  //
+  // The asymmetry was not a considered trade-off: the transaction variant polls for exactly
+  // the same reason ("batch registration workflows"), and both flows read the nonce at the
+  // same moments. `staleTime` is dropped with it, since a 30s staleness floor under a 5s
+  // interval would just discard four polls in five.
+  const refetchInterval = 5_000;
 
   // Split-call: one hook per ABI, only one fires based on registryType
   // For hub, choose wallet or transaction ABI based on variant
@@ -79,20 +91,26 @@ export function useContractNonce(
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !isSpoke && enabled,
-      staleTime,
       refetchInterval,
     },
   });
+
+  // The spoke hosts BOTH flows on one contract, so unlike the hub it needs two counters and
+  // the variant has to pick between them (`SpokeRegistry.nonces` vs `SpokeRegistry.txNonces`).
+  // Reading `nonces` for a transaction batch returns the WALLET counter, and every spoke
+  // batch signature would then be signed against the wrong value and revert with
+  // `SpokeRegistry__InvalidNonce`. The hub branch above is unaffected: its two flows live on
+  // separate contracts, so `nonces` is the only counter either of them has.
+  const spokeNonceFn = variant === 'transaction' ? 'txNonces' : 'nonces';
 
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'nonces',
+    functionName: spokeNonceFn,
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: isSpoke && enabled,
-      staleTime,
       refetchInterval,
     },
   });
@@ -152,10 +170,12 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
     },
   });
 
+  // `txNonces`, never `nonces` — this hook is transaction-batch-only, and on the spoke the two
+  // flows are separate counters on one contract. See the note in `useContractNonce`.
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
-    functionName: 'nonces',
+    functionName: 'txNonces',
     args: address ? [address] : undefined,
     chainId,
     query: {

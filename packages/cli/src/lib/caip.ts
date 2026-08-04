@@ -12,6 +12,8 @@ export {
   chainIdToBytes32,
   caip2ToBytes32,
   bytes32ToCAIP2,
+  // Validation
+  isValidCAIP2,
   // String conversions
   toCAIP2,
   caip2ToNumericChainId,

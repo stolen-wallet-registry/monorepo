@@ -5,7 +5,8 @@
  * Must be called after the grace period has elapsed following acknowledgement.
  *
  * Unified signature (hub and spoke):
- *   register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ *   register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce,
+ *            windowBlock, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */
@@ -30,6 +31,11 @@ export interface RegistrationParams {
   deadline: bigint;
   /** Nonce for replay protection */
   nonce: bigint;
+  /**
+   * Block whose hash the signature committed to. Unsigned calldata — the contract recomputes
+   * `blockhash(windowBlock)` and compares, so this must be the exact block used at signing.
+   */
+  windowBlock: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the registration transaction */
@@ -96,6 +102,7 @@ export function useRegistration(): UseRegistrationResult {
       incidentTimestamp,
       deadline,
       nonce,
+      windowBlock,
       signature,
       feeWei,
     } = params;
@@ -111,11 +118,13 @@ export function useRegistration(): UseRegistrationResult {
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
       nonce: nonce.toString(),
+      windowBlock: windowBlock.toString(),
       feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
-      // Unified: register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      // Unified: register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline,
+      //                   nonce, windowBlock, v, r, s)
       const args = [
         registeree,
         trustedForwarder,
@@ -123,6 +132,7 @@ export function useRegistration(): UseRegistrationResult {
         incidentTimestamp,
         deadline,
         nonce,
+        windowBlock,
         signature.v,
         signature.r,
         signature.s,
@@ -133,6 +143,7 @@ export function useRegistration(): UseRegistrationResult {
         ? await writeContractAsync({
             address: contractAddress,
             abi: spokeRegistryAbi,
+            chainId,
             functionName: 'register',
             args,
             value: feeWei ?? 0n,
@@ -140,6 +151,7 @@ export function useRegistration(): UseRegistrationResult {
         : await writeContractAsync({
             address: contractAddress,
             abi: walletRegistryAbi,
+            chainId,
             functionName: 'register',
             args,
             value: feeWei ?? 0n,

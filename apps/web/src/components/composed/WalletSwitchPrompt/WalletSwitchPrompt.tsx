@@ -80,6 +80,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              resolveEns={false}
               aria-label={`Connected wallet address: ${expectedAddress}`}
             />
             <span className="text-xs">({expectedLabel})</span>
@@ -105,6 +106,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              resolveEns={false}
               aria-label={`Expected wallet address: ${expectedAddress}`}
             />
           </div>
@@ -174,6 +176,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              resolveEns={false}
               aria-label={`Current wallet address: ${currentAddress}`}
             />
             {currentLabel && <span className="text-xs">({currentLabel})</span>}
@@ -188,6 +191,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              resolveEns={false}
               aria-label={`Expected wallet address: ${expectedAddress}`}
             />
             <span className="text-xs">({expectedLabel})</span>

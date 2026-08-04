@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 
 import { IWalletRegistry } from "../interfaces/IWalletRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
@@ -21,7 +22,7 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - CAIP-363 wildcard keys for EVM wallets
 ///      - Two-phase registration (acknowledge → grace period → register)
 ///      - Single-phase for operator/cross-chain submissions
-contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
+contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -85,8 +86,20 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     {
         if (_owner == address(0)) revert WalletRegistry__ZeroAddress();
 
-        // Validate timing: deadline must allow for worst-case grace period
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+        // Validate timing: the acknowledgement must always leave at least one block on which
+        // `register` can actually succeed, for EVERY randomised draw.
+        //
+        // `getGracePeriodEndBlock` tops out at `block.number + 2 * graceBlocks - 1`;
+        // `getDeadlineBlock` bottoms out at `block.number + deadlineBlocks`. Registration needs a
+        // block B with `gracePeriodStart < B < deadline` — strictly greater, not >=, because
+        // `TimingConfig.resolveWindowBlockHash` demands `gracePeriodStart <= windowBlock < B`, so
+        // the earliest usable B is `gracePeriodStart + 1`. That makes the required bound
+        // `deadlineBlocks >= 2 * graceBlocks + 1`.
+        //
+        // `>= 2 * graceBlocks` (what this used to be) predates `windowBlock` and is off by one:
+        // it admits configurations where an unlucky draw produces an acknowledgement that can
+        // never be registered, burning the user's nonce and acknowledgement gas.
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks + 1) {
             revert WalletRegistry__DeadlineInPast();
         }
 
@@ -118,7 +131,14 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        // Free-registration mode (`feeManager == address(0)`) is a supported deployment shape, so
+        // it must still return anything the caller sent. Returning early WITHOUT refunding skipped
+        // the excess branch below and silently retained the whole `msg.value`, recoverable only by
+        // the owner — every other mode refunds the overpayment.
+        if (feeManager == address(0)) {
+            _refundAll();
+            return;
+        }
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {
@@ -142,6 +162,16 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             if (!refundSuccess) {
                 revert WalletRegistry__RefundFailed();
             }
+        }
+    }
+
+    /// @dev Returns the entire `msg.value` to the caller. Used when there is no fee to charge at
+    ///      all, so nothing should be retained. No-op when nothing was sent.
+    function _refundAll() internal {
+        if (msg.value == 0) return;
+        (bool refundSuccess,) = msg.sender.call{ value: msg.value }("");
+        if (!refundSuccess) {
+            revert WalletRegistry__RefundFailed();
         }
     }
 
@@ -208,6 +238,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline,
+        bytes32 windowBlockHash,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -222,7 +253,8 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
-                    deadline
+                    deadline,
+                    windowBlockHash
                 )
             )
         );
@@ -308,42 +340,28 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc IWalletRegistry
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+    /// @dev Returns ONLY the deadline. There is deliberately no hash-struct return value.
+    ///      The registration typehashes gained `windowBlockHash` (audit finding V1), and that
+    ///      value is NOT knowable here: the frontend calls this BEFORE signing to obtain the
+    ///      deadline, and resolves the window block later, at signing time. Any digest this
+    ///      function could build for the registration phase would therefore be missing a member
+    ///      the typehash declares — a digest no wallet will ever produce and no verifier will
+    ///      ever accept. It previously returned exactly that, silently. Callers build their own
+    ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
+    ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
+    ///      the caller does not have one at this point in the flow.
+    function getSignatureDeadline(
+        uint64, /* reportedChainId */
+        uint64, /* incidentTimestamp */
+        address, /* trustedForwarder */
+        uint8 step
+    )
         external
         view
-        returns (uint256 deadline, bytes32 hashStruct)
+        returns (uint256 deadline)
     {
         if (step != 1 && step != 2) revert WalletRegistry__InvalidStep();
-        deadline = TimingConfig.getSignatureDeadline();
-        if (step == 1) {
-            // Acknowledgement
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_ACK_TYPEHASH,
-                    EIP712Constants.ACK_STATEMENT_HASH,
-                    msg.sender, // wallet
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        } else {
-            // Registration
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_REG_TYPEHASH,
-                    EIP712Constants.REG_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        }
+        return TimingConfig.getSignatureDeadline();
     }
 
     /// @inheritdoc IWalletRegistry
@@ -406,7 +424,21 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     ) external {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
         if (trustedForwarder == address(0)) revert WalletRegistry__ZeroAddress();
-        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+        // Only the forwarder named in the signature may open the window. All three flows
+        // already satisfy this (standard: self; self-relay: the gas wallet; P2P: the relayer),
+        // and requiring it closes two holes: a third party could otherwise grind their own
+        // address to steer the "randomized" timing, and could burn a victim's nonce to grief
+        // them. `register` already demands `msg.sender == trustedForwarder`.
+        if (msg.sender != trustedForwarder) revert WalletRegistry__InvalidForwarder();
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+            revert WalletRegistry__DeadlineTooFarInFuture();
+        }
+        // 0 means "unknown" and is allowed; a future incident is not physically possible and
+        // would permanently poison time-based analytics for every downstream consumer.
+        if (incidentTimestamp > block.timestamp) revert WalletRegistry__InvalidIncidentTimestamp();
 
         // Check not already registered
         bytes32 key = CAIP10Evm.evmWalletKey(registeree);
@@ -460,12 +492,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint64 incidentTimestamp,
         uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
         uint256 nonce,
+        uint256 windowBlock, // Block whose hash the signature commits to (NOT signed — see below)
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
-        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+            revert WalletRegistry__DeadlineTooFarInFuture();
+        }
 
         // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
@@ -484,8 +522,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         // Validate nonce matches expected value (fail-fast before signature verification)
         if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
+        // ANTI-PHISHING: the signature must commit to the hash of a block at or after the
+        // grace period started. That block — and therefore its hash — did not exist when the
+        // acknowledgement was signed, so this signature CANNOT have been produced in the same
+        // sitting as the acknowledgement. Without this, a phishing page could collect both
+        // signatures seconds apart and submit them itself once the delay had quietly elapsed.
+        // Reverts if the reference is too early, unmined, or aged out of `blockhash` range.
+        bytes32 windowBlockHash = TimingConfig.resolveWindowBlockHash(windowBlock, ack.gracePeriodStart);
+
         // Verify EIP-712 signature (uses trustedForwarder param — must match msg.sender for sig to be valid)
-        _verifyRegSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+        _verifyRegSignature(
+            registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlockHash, v, r, s
+        );
 
         // Revert if wallet was registered by another path (cross-chain/operator) during grace period
         bytes32 key = CAIP10Evm.evmWalletKey(registeree);
@@ -528,6 +576,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint8 bridgeId,
         bytes32 messageId
     ) external onlyHub {
+        // Ignore, rather than revert, on inputs every other path rejects. Hyperlane re-delivers a
+        // reverting message indefinitely, so reverting here would turn one malformed payload into
+        // a permanently undeliverable message — the exact situation the duplicate no-op logic
+        // upstream exists to avoid. Returning marks it delivered and drops it.
+        if (identifier == bytes32(0)) return;
+
+        // A future incident is not physically possible; `acknowledge`, `register` and the operator
+        // batch path all reject it outright. This path cannot reject (see above), so clamp to the
+        // established "unknown" sentinel rather than writing an unfalsifiable timestamp into
+        // permanent storage where it would poison every downstream time-based analytic.
+        if (incidentTimestamp > block.timestamp) incidentTimestamp = 0;
+
         // Compute storage key based on namespace
         bytes32 key;
 
@@ -586,6 +646,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             bytes32 identifier = identifiers[i];
             if (identifier == bytes32(0)) continue;
 
+            // Same rule as the individual path: 0 is "unknown", the future is not allowed.
+            // Rejects the whole batch rather than skipping the entry — a future-dated incident
+            // is a fixable mistake in the operator's input file, and silently dropping entries
+            // would leave the operator believing data landed when it did not.
+            if (incidentTimestamps[i] > block.timestamp) revert WalletRegistry__InvalidIncidentTimestamp();
+
             // Assume EVM addresses for operator submissions
             address wallet = address(uint160(uint256(identifier)));
             bytes32 key = CAIP10Evm.evmWalletKey(wallet);
@@ -604,6 +670,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             emit WalletRegistered(identifier, reportedChainIds[i], incidentTimestamps[i], false);
         }
 
+        // Reject a batch in which nothing was actually registered (every entry was a zero
+        // identifier or already registered), matching ContractRegistry. Otherwise the operator
+        // pays full gas for a no-op, a batch ID is burned, and the indexer materialises a
+        // phantom zero-entry batch with no per-entry events to join against.
+        if (actualCount == 0) revert WalletRegistry__EmptyBatch();
+
         _batches[batchId] =
             Batch({ operatorId: operatorId, timestamp: uint64(block.timestamp), walletCount: actualCount });
 
@@ -615,16 +687,57 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IWalletRegistry
-    function setHub(address newHub) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      `hub` and `operatorSubmitter` are trust boundaries: whoever holds them can write
+    ///      registry entries directly, so post-setup changes go through propose → 2 days →
+    ///      activate, matching FraudRegistryHub and CrossChainInbox.
+    function setHub(address newHub) external onlyOwner onlyDuringSetup {
         if (newHub == address(0)) revert WalletRegistry__ZeroAddress();
+        _setHub(newHub);
+    }
+
+    /// @notice Propose a hub change (2-day delay before activation)
+    /// @param newHub Address of the new hub
+    function proposeHub(address newHub) external onlyOwner {
+        if (newHub == address(0)) revert WalletRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setHub", newHub)));
+    }
+
+    /// @notice Activate a previously proposed hub change
+    /// @param newHub Address of the new hub
+    function activateHub(address newHub) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setHub", newHub)));
+        _setHub(newHub);
+    }
+
+    /// @inheritdoc IWalletRegistry
+    /// @dev Immediate during initial setup, timelocked after completeSetup()
+    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner onlyDuringSetup {
+        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    /// @notice Propose an operator submitter change (2-day delay before activation)
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function proposeOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+    }
+
+    /// @notice Activate a previously proposed operator submitter change
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function activateOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    function _setHub(address newHub) internal {
         address oldHub = hub;
         hub = newHub;
         emit HubUpdated(oldHub, newHub);
     }
 
-    /// @inheritdoc IWalletRegistry
-    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
-        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+    function _setOperatorSubmitter(address newOperatorSubmitter) internal {
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);
