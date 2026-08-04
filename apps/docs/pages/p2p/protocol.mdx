@@ -56,7 +56,7 @@ sequenceDiagram
     Note over L: Relayer pasted the pairing code:<br/>it already knows peer ID + wallet
     L->>R: CONNECT (relayer wallet address)
     R->>L: CONNECT (registeree wallet address)
-    Note over R,L: Relayer pinned its partner before dialing;<br/>registeree pins the peer that connected
+    Note over R,L: Relayer pinned its partner before dialing —<br/>registeree pins the peer that connected
 
     Note over R,L: Acknowledgement Phase
     R->>R: Sign ACK (EIP-712 in wallet)
